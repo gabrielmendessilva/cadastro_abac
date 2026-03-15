@@ -1,0 +1,66 @@
+# Sistema
+.DS_Store
+Thumbs.db
+
+# Laravel
+/public/hot
+/public/storage
+/public/build
+/storage/*.key
+/storage/logs/*
+!/storage/logs/.gitignore
+/storage/framework/cache/*
+!/storage/framework/cache/.gitignore
+/storage/framework/sessions/*
+!/storage/framework/sessions/.gitignore
+/storage/framework/testing/*
+!/storage/framework/testing/.gitignore
+/storage/framework/views/*
+!/storage/framework/views/.gitignore
+/bootstrap/cache/*
+!/bootstrap/cache/.gitignore
+
+# Environment
+.env
+.env.*
+!.env.example
+
+# Dependências
+/vendor
+/node_modules
+
+# Testes / cobertura
+.phpunit.cache
+.phpunit.result.cache
+coverage/
+coverage.xml
+
+# IDE / editor
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Front build
+/public/mix-manifest.json
+
+# SQLite local
+/database/*.sqlite
+*.sqlite
+
+# Modules - ignora dependências/build internos, mas mantém código
+/Modules/*/node_modules
+/Modules/*/vendor
+/Modules/*/public/build
+/Modules/*/.env
+/Modules/*/.phpunit.cache
+/Modules/*/.phpunit.result.cache
+/Modules/*/.idea
+/Modules/*/.vscode
