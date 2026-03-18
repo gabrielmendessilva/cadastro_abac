@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>@yield('title', 'Sistema GED')</title>
+    <title>@yield('title', 'Abac')</title>
     @vite(['resources/css/app.css', 'resources/js/app.js'])
     <style>
         [x-cloak] { display: none !important; }
@@ -13,8 +13,8 @@
     <div class="min-h-screen flex">
         <aside class="w-72 bg-slate-900 text-white p-6 hidden lg:block">
             <div class="mb-8">
-                <h1 class="text-2xl font-bold">Sistema GED</h1>
-                <p class="text-slate-400 text-sm mt-2">Cadastro online + documentos por cliente</p>
+                <h1 class="text-2xl font-bold">Abac</h1>
+                <p class="text-slate-400 text-sm mt-2">Cadastro online</p>
             </div>
 
             <nav class="space-y-2">
@@ -22,9 +22,9 @@
                 @can('clients.view')
                     <a href="{{ route('clients.index') }}" class="block rounded-xl px-4 py-3 hover:bg-slate-800 {{ request()->routeIs('clients.*') ? 'bg-slate-800' : '' }}">Clientes</a>
                 @endcan
-                @can('documents.view')
+                {{-- @can('documents.view')
                     <a href="{{ route('documents.index') }}" class="block rounded-xl px-4 py-3 hover:bg-slate-800 {{ request()->routeIs('documents.*') ? 'bg-slate-800' : '' }}">GED</a>
-                @endcan
+                @endcan --}}
                 @can('users.view')
                     <a href="{{ route('users.index') }}" class="block rounded-xl px-4 py-3 hover:bg-slate-800 {{ request()->routeIs('users.*') ? 'bg-slate-800' : '' }}">Usuários</a>
                 @endcan

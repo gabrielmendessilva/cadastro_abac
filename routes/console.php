@@ -3,5 +3,5 @@
 use Illuminate\Support\Facades\Artisan;
 
 Artisan::command('inspire', function () {
-    $this->comment('Sistema GED pronto para evoluir.');
+    $this->comment('Abac pronto para evoluir.');
 })->purpose('Display an inspiring quote');
