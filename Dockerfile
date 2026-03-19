@@ -25,14 +25,26 @@ RUN composer install --no-dev --no-scripts --no-autoloader --prefer-dist
 # Copia o restante do projeto
 COPY . .
 
+# ✅ Cria diretórios e permissões ANTES do composer dump-autoload
+RUN mkdir -p /var/www/bootstrap/cache \
+    && mkdir -p /var/www/storage/logs \
+    && mkdir -p /var/www/storage/framework/cache \
+    && mkdir -p /var/www/storage/framework/sessions \
+    && mkdir -p /var/www/storage/framework/views \
+    && chown -R www-data:www-data /var/www \
+    && chmod -R 775 /var/www/storage \
+    && chmod -R 775 /var/www/bootstrap/cache
+
+# Instala Node e compila assets
+RUN curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
+    && apt-get install -y nodejs \
+    && npm install \
+    && npm run build \
+    && rm -rf node_modules
+
 # Finaliza o autoload e otimiza
 RUN composer dump-autoload --optimize \
     && php artisan package:discover --ansi
-
-# Permissões
-RUN chown -R www-data:www-data /var/www \
-    && chmod -R 755 /var/www/storage \
-    && chmod -R 755 /var/www/bootstrap/cache
 
 COPY docker/entrypoint.sh /usr/local/bin/entrypoint.sh
 RUN chmod +x /usr/local/bin/entrypoint.sh
