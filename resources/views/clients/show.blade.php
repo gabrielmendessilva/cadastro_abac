@@ -40,39 +40,10 @@
         </div>
     @endif
 
-    <div class="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-        <div class="border-b border-slate-200 px-4 pt-4">
-            <nav class="-mb-px flex flex-wrap gap-2">
-                <a href="{{ route('clients.show', ['client' => $client, 'tab' => 'geral']) }}"
-                   class="{{ $activeTab === 'geral' ? 'border-blue-600 bg-blue-50 text-blue-600' : 'border-transparent text-slate-500 hover:bg-slate-50 hover:text-slate-700' }} rounded-t-xl border-b-2 px-4 py-3 text-sm font-medium">
-                    Geral
-                </a>
+    <div class="flex flex-col gap-4 lg:flex-row">
+        @include('clients.partials._sidebar')
 
-                <a href="{{ route('clients.show', ['client' => $client, 'tab' => 'enderecos']) }}"
-                   class="{{ $activeTab === 'enderecos' ? 'border-blue-600 bg-blue-50 text-blue-600' : 'border-transparent text-slate-500 hover:bg-slate-50 hover:text-slate-700' }} rounded-t-xl border-b-2 px-4 py-3 text-sm font-medium">
-                    Endereços
-                </a>
-
-                <a href="{{ route('clients.show', ['client' => $client, 'tab' => 'contatos']) }}"
-                   class="{{ $activeTab === 'contatos' ? 'border-blue-600 bg-blue-50 text-blue-600' : 'border-transparent text-slate-500 hover:bg-slate-50 hover:text-slate-700' }} rounded-t-xl border-b-2 px-4 py-3 text-sm font-medium">
-                    Contatos
-                </a>
-
-                <a href="{{ route('clients.show', ['client' => $client, 'tab' => 'opcionais']) }}"
-                   class="{{ $activeTab === 'opcionais' ? 'border-blue-600 bg-blue-50 text-blue-600' : 'border-transparent text-slate-500 hover:bg-slate-50 hover:text-slate-700' }} rounded-t-xl border-b-2 px-4 py-3 text-sm font-medium">
-                    Opcionais
-                </a>
-
-                @can('documents.view')
-                    <a href="{{ route('clients.show', ['client' => $client, 'tab' => 'ged']) }}"
-                       class="{{ $activeTab === 'ged' ? 'border-blue-600 bg-blue-50 text-blue-600' : 'border-transparent text-slate-500 hover:bg-slate-50 hover:text-slate-700' }} rounded-t-xl border-b-2 px-4 py-3 text-sm font-medium">
-                        GED
-                    </a>
-                @endcan
-            </nav>
-        </div>
-
-        <div class="p-6">
+        <div class="flex-1 overflow-hidden rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
             @if ($activeTab === 'geral')
                 <div class="space-y-6">
                     <div>
@@ -82,6 +53,13 @@
 
                     <div class="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
                         @php
+                            $fieldHints = [
+                                'Código Omie' => ['hint' => 'Bloqueado para alterações acidentais. Use o botão Editar para modificar.', 'locked' => true],
+                                'Classificação' => ['hint' => 'Definição pendente — confirmar com o cliente.', 'pending' => true],
+                                'Situação ABAC' => ['hint' => 'Definição pendente — confirmar com o cliente.', 'pending' => true],
+                                'Classificação Administradora' => ['hint' => 'Definição pendente — confirmar com o cliente.', 'pending' => true],
+                            ];
+
                             $fields = [
                                 'Código Omie' => $client->cod_omie,
                                 'Nome Fantasia' => $client->nome_fantasia,
@@ -115,10 +93,19 @@
                         @endphp
 
                         @foreach ($fields as $label => $value)
+                            @php $hint = $fieldHints[$label] ?? null; @endphp
                             <div class="{{ in_array($label, ['Nome / Razão Social', 'E-mail Admin', 'Contato Admin', 'Segmentos', 'Área de Atuação']) ? 'md:col-span-2' : '' }}">
-                                <label class="mb-1 block text-sm font-medium text-slate-700">{{ $label }}</label>
-                                <div class="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-800">
-                                    {{ $value ?: '-' }}
+                                <label class="mb-1 flex items-center gap-1 text-sm font-medium text-slate-700">
+                                    <span>{{ $label }}</span>
+                                    @if($hint)
+                                        <span class="text-xs text-slate-400" title="{{ $hint['hint'] }}">ⓘ</span>
+                                    @endif
+                                    @if($hint['locked'] ?? false)
+                                        <span class="ml-auto rounded-full bg-slate-200 px-2 py-0.5 text-[10px] font-semibold uppercase text-slate-600">🔒 bloqueado</span>
+                                    @endif
+                                </label>
+                                <div class="rounded-xl border {{ ($hint['pending'] ?? false) && empty($value) ? 'border-amber-200 bg-amber-50' : 'border-slate-200 bg-slate-50' }} px-4 py-3 text-sm text-slate-800">
+                                    {{ $value ?: (($hint['pending'] ?? false) ? '(definir com o cliente)' : '-') }}
                                 </div>
                             </div>
                         @endforeach
@@ -136,6 +123,128 @@
                                 {{ $client->obs_2 ?: '-' }}
                             </div>
                         </div>
+                    </div>
+
+                    {{-- Histórico ABAC --}}
+                    <div class="rounded-2xl border border-slate-200 bg-white p-5">
+                        <div class="mb-4 grid grid-cols-1 gap-4 md:grid-cols-4">
+                            <div>
+                                <p class="text-xs uppercase text-slate-500">Associado ABAC</p>
+                                <p class="text-sm font-semibold">{{ $client->associado_abac ? 'Sim' : 'Não' }}</p>
+                            </div>
+                            <div>
+                                <p class="text-xs uppercase text-slate-500">Nº filiação atual</p>
+                                <p class="text-sm font-semibold">{{ $client->num_filiacao_abac ?: '-' }}</p>
+                            </div>
+                            <div>
+                                <p class="text-xs uppercase text-slate-500">Data filiação</p>
+                                <p class="text-sm font-semibold">{{ $client->dt_filiacao_abac?->format('d/m/Y') ?: '-' }}</p>
+                            </div>
+                            <div>
+                                <p class="text-xs uppercase text-slate-500">Data desfiliação</p>
+                                <p class="text-sm font-semibold">{{ $client->dt_desfiliacao_abac?->format('d/m/Y') ?: '-' }}</p>
+                            </div>
+                        </div>
+                        @include('clients.partials._filiacoes', ['tipo' => 'abac'])
+                    </div>
+
+                    {{-- Histórico SINAC --}}
+                    <div class="rounded-2xl border border-slate-200 bg-white p-5">
+                        <div class="mb-4 grid grid-cols-1 gap-4 md:grid-cols-4">
+                            <div>
+                                <p class="text-xs uppercase text-slate-500">Associado SINAC</p>
+                                <p class="text-sm font-semibold">{{ $client->associado_sinac ? 'Sim' : 'Não' }}</p>
+                            </div>
+                            <div>
+                                <p class="text-xs uppercase text-slate-500">Nº filiação atual</p>
+                                <p class="text-sm font-semibold">{{ $client->num_filiacao_sinac ?: '-' }}</p>
+                            </div>
+                            <div>
+                                <p class="text-xs uppercase text-slate-500">Data filiação</p>
+                                <p class="text-sm font-semibold">{{ $client->dt_filiacao_sinac?->format('d/m/Y') ?: '-' }}</p>
+                            </div>
+                            <div>
+                                <p class="text-xs uppercase text-slate-500">Data desfiliação</p>
+                                <p class="text-sm font-semibold">{{ $client->dt_desfiliacao_sinac?->format('d/m/Y') ?: '-' }}</p>
+                            </div>
+                        </div>
+                        @include('clients.partials._filiacoes', ['tipo' => 'sinac'])
+                    </div>
+
+                    {{-- Redes sociais --}}
+                    <div x-data="{ openRede: false }" class="rounded-2xl border border-slate-200 bg-white p-5">
+                        <div class="mb-3 flex items-center justify-between">
+                            <h3 class="text-sm font-semibold text-slate-700">Redes sociais</h3>
+                            @can('clients.edit')
+                                <button @click="openRede = true"
+                                        class="rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-700">
+                                    + Adicionar rede
+                                </button>
+                            @endcan
+                        </div>
+
+                        @if ($client->redesSociais->isEmpty())
+                            <p class="rounded-lg border border-dashed border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-500">Nenhuma rede social cadastrada.</p>
+                        @else
+                            <div class="grid grid-cols-1 gap-2 md:grid-cols-2">
+                                @foreach ($client->redesSociais as $rede)
+                                    <div class="flex items-center justify-between gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm">
+                                        <div class="min-w-0 flex-1">
+                                            <span class="rounded-full bg-blue-100 px-2 py-0.5 text-xs text-blue-700">{{ \App\Models\ClientRedeSocial::TIPOS[$rede->tipo] }}</span>
+                                            @if ($rede->rotulo)
+                                                <span class="text-xs text-slate-500">· {{ $rede->rotulo }}</span>
+                                            @endif
+                                            <a href="{{ $rede->url }}" target="_blank" rel="noopener"
+                                               class="ml-2 break-all text-blue-600 hover:underline">{{ $rede->url }}</a>
+                                        </div>
+                                        @can('clients.edit')
+                                            <form method="POST" action="{{ route('clients.redes.destroy', [$client, $rede]) }}">
+                                                @csrf @method('DELETE')
+                                                <button onclick="return confirm('Remover?')"
+                                                        class="rounded-lg border border-red-200 px-2 py-0.5 text-xs text-red-600 hover:bg-red-50">×</button>
+                                            </form>
+                                        @endcan
+                                    </div>
+                                @endforeach
+                            </div>
+                        @endif
+
+                        @can('clients.edit')
+                            <div x-show="openRede" x-cloak class="fixed inset-0 z-[9999] overflow-y-auto bg-black/50">
+                                <div class="flex min-h-full items-center justify-center p-4">
+                                    <div @click.away="openRede = false" class="w-full max-w-xl rounded-2xl bg-white shadow-2xl">
+                                        <form method="POST" action="{{ route('clients.redes.store', $client) }}">
+                                            @csrf
+                                            <div class="border-b border-slate-200 px-6 py-4">
+                                                <h3 class="text-lg font-semibold text-slate-900">Adicionar rede social</h3>
+                                            </div>
+                                            <div class="grid grid-cols-1 gap-4 p-6 md:grid-cols-2">
+                                                <div>
+                                                    <label class="mb-1 block text-sm font-medium text-slate-700">Tipo *</label>
+                                                    <select name="tipo" required class="w-full rounded-xl border border-slate-300 px-4 py-2.5 text-sm">
+                                                        @foreach (\App\Models\ClientRedeSocial::TIPOS as $key => $label)
+                                                            <option value="{{ $key }}">{{ $label }}</option>
+                                                        @endforeach
+                                                    </select>
+                                                </div>
+                                                <div>
+                                                    <label class="mb-1 block text-sm font-medium text-slate-700">Rótulo</label>
+                                                    <input type="text" name="rotulo" placeholder="Ex.: Perfil oficial" class="w-full rounded-xl border border-slate-300 px-4 py-2.5 text-sm">
+                                                </div>
+                                                <div class="md:col-span-2">
+                                                    <label class="mb-1 block text-sm font-medium text-slate-700">URL *</label>
+                                                    <input type="url" name="url" required class="w-full rounded-xl border border-slate-300 px-4 py-2.5 text-sm">
+                                                </div>
+                                            </div>
+                                            <div class="flex justify-end gap-3 border-t border-slate-200 px-6 py-4">
+                                                <button type="button" @click="openRede = false" class="rounded-xl border border-slate-300 px-4 py-2 text-sm">Cancelar</button>
+                                                <button class="rounded-xl bg-blue-600 px-4 py-2 text-sm text-white hover:bg-blue-700">Salvar</button>
+                                            </div>
+                                        </form>
+                                    </div>
+                                </div>
+                            </div>
+                        @endcan
                     </div>
                 </div>
             @endif
@@ -180,6 +289,7 @@
                             <table class="min-w-full divide-y divide-slate-200">
                                 <thead class="bg-slate-50">
                                     <tr>
+                                        <th class="px-4 py-3 text-left text-xs font-semibold uppercase text-slate-500">Tipo</th>
                                         <th class="px-4 py-3 text-left text-xs font-semibold uppercase text-slate-500">CEP</th>
                                         <th class="px-4 py-3 text-left text-xs font-semibold uppercase text-slate-500">Rua</th>
                                         <th class="px-4 py-3 text-left text-xs font-semibold uppercase text-slate-500">Número</th>
@@ -193,6 +303,11 @@
                                 <tbody class="divide-y divide-slate-100 bg-white">
                                     @forelse($addresses as $address)
                                         <tr>
+                                            <td class="px-4 py-3 text-sm">
+                                                <span class="rounded-full {{ $address->tipo === 'principal' ? 'bg-blue-100 text-blue-700' : ($address->tipo === 'secundario' ? 'bg-amber-100 text-amber-700' : 'bg-slate-100 text-slate-600') }} px-2 py-0.5 text-xs">
+                                                    {{ \App\Models\ClientEndereco::TIPOS[$address->tipo] ?? 'Outro' }}
+                                                </span>
+                                            </td>
                                             <td class="px-4 py-3 text-sm text-slate-700">{{ $address->cep ?: '-' }}</td>
                                             <td class="px-4 py-3 text-sm text-slate-700">{{ $address->rua ?: '-' }}</td>
                                             <td class="px-4 py-3 text-sm text-slate-700">{{ $address->numero ?: '-' }}</td>
@@ -222,7 +337,7 @@
                                         </tr>
                                     @empty
                                         <tr>
-                                            <td colspan="6" class="px-4 py-8 text-center text-sm text-slate-500">Nenhum endereço encontrado.</td>
+                                            <td colspan="7" class="px-4 py-8 text-center text-sm text-slate-500">Nenhum endereço encontrado.</td>
                                         </tr>
                                     @endforelse
                                 </tbody>
@@ -243,6 +358,14 @@
                                         </div>
 
                                         <div class="grid grid-cols-1 gap-4 p-6 md:grid-cols-2 xl:grid-cols-4">
+                                            <div>
+                                                <label class="mb-1 block text-sm font-medium text-slate-700">Tipo do endereço</label>
+                                                <select name="tipo" class="w-full rounded-xl border border-slate-300 px-4 py-2.5 text-sm">
+                                                    @foreach (\App\Models\ClientEndereco::TIPOS as $key => $label)
+                                                        <option value="{{ $key }}" {{ ($address->tipo ?? 'outro') === $key ? 'selected' : '' }}>{{ $label }}</option>
+                                                    @endforeach
+                                                </select>
+                                            </div>
                                             <div>
                                                 <label class="mb-1 block text-sm font-medium text-slate-700">CEP</label>
                                                 <input type="text" name="cep" class="w-full rounded-xl border border-slate-300 px-4 py-2.5 text-sm">
@@ -509,9 +632,21 @@
                                                 <label class="mb-1 block text-sm font-medium text-slate-700">E-mail</label>
                                                 <input type="email" name="email" class="w-full rounded-xl border border-slate-300 px-4 py-2.5 text-sm">
                                             </div>
+                                            <div class="xl:col-span-2">
+                                                <label class="mb-1 block text-sm font-medium text-slate-700">E-mail 2</label>
+                                                <input type="email" name="email_2" class="w-full rounded-xl border border-slate-300 px-4 py-2.5 text-sm">
+                                            </div>
                                             <div>
                                                 <label class="mb-1 block text-sm font-medium text-slate-700">Telefone</label>
                                                 <input type="text" name="telefone" class="w-full rounded-xl border border-slate-300 px-4 py-2.5 text-sm">
+                                            </div>
+                                            <div>
+                                                <label class="mb-1 block text-sm font-medium text-slate-700">Ramal</label>
+                                                <input type="text" name="ramal" class="w-full rounded-xl border border-slate-300 px-4 py-2.5 text-sm">
+                                            </div>
+                                            <div>
+                                                <label class="mb-1 block text-sm font-medium text-slate-700">Celular</label>
+                                                <input type="text" name="celular" class="w-full rounded-xl border border-slate-300 px-4 py-2.5 text-sm">
                                             </div>
                                             <div>
                                                 <label class="mb-1 block text-sm font-medium text-slate-700">Telefone 2</label>
@@ -587,9 +722,21 @@
                                                     <label class="mb-1 block text-sm font-medium text-slate-700">E-mail</label>
                                                     <input type="email" name="email" value="{{ $contact->email }}" class="w-full rounded-xl border border-slate-300 px-4 py-2.5 text-sm">
                                                 </div>
+                                                <div class="xl:col-span-2">
+                                                    <label class="mb-1 block text-sm font-medium text-slate-700">E-mail 2</label>
+                                                    <input type="email" name="email_2" value="{{ $contact->email_2 }}" class="w-full rounded-xl border border-slate-300 px-4 py-2.5 text-sm">
+                                                </div>
                                                 <div>
                                                     <label class="mb-1 block text-sm font-medium text-slate-700">Telefone</label>
                                                     <input type="text" name="telefone" value="{{ $contact->telefone }}" class="w-full rounded-xl border border-slate-300 px-4 py-2.5 text-sm">
+                                                </div>
+                                                <div>
+                                                    <label class="mb-1 block text-sm font-medium text-slate-700">Ramal</label>
+                                                    <input type="text" name="ramal" value="{{ $contact->ramal }}" class="w-full rounded-xl border border-slate-300 px-4 py-2.5 text-sm">
+                                                </div>
+                                                <div>
+                                                    <label class="mb-1 block text-sm font-medium text-slate-700">Celular</label>
+                                                    <input type="text" name="celular" value="{{ $contact->celular }}" class="w-full rounded-xl border border-slate-300 px-4 py-2.5 text-sm">
                                                 </div>
                                                 <div>
                                                     <label class="mb-1 block text-sm font-medium text-slate-700">Telefone 2</label>
@@ -848,8 +995,12 @@
                 <div x-data="{ createOpen: false }" class="space-y-4">
                     <div class="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
                         <div>
-                            <h2 class="text-lg font-semibold text-slate-900">GED</h2>
-                            <p class="text-sm text-slate-500">Documentos vinculados a este cliente.</p>
+                            <h2 class="text-lg font-semibold text-slate-900">
+                                GED · {{ $gedCategory ? \App\Models\Document::CATEGORIES[$gedCategory] : 'Todos os documentos' }}
+                            </h2>
+                            <p class="text-sm text-slate-500">
+                                {{ $gedCategory ? 'Documentos desta categoria.' : 'Documentos vinculados a este cliente. Use o menu lateral para filtrar por categoria.' }}
+                            </p>
                         </div>
 
                         @can('documents.create')
@@ -863,6 +1014,9 @@
 
                     <form method="GET" action="{{ route('clients.show', $client) }}" class="grid grid-cols-1 gap-3 md:grid-cols-4">
                         <input type="hidden" name="tab" value="ged">
+                        @if($gedCategory)
+                            <input type="hidden" name="subtab" value="{{ $gedCategory }}">
+                        @endif
                         <div class="md:col-span-2">
                             <input type="text" name="document_search" value="{{ request('document_search') }}"
                                    placeholder="Buscar por título, arquivo, tipo ou descrição..."
@@ -886,6 +1040,7 @@
                                     <tr>
                                         <th class="px-4 py-3 text-left text-xs font-semibold uppercase text-slate-500">Título</th>
                                         <th class="px-4 py-3 text-left text-xs font-semibold uppercase text-slate-500">Arquivo</th>
+                                        <th class="px-4 py-3 text-left text-xs font-semibold uppercase text-slate-500">Categoria</th>
                                         <th class="px-4 py-3 text-left text-xs font-semibold uppercase text-slate-500">Tipo</th>
                                         <th class="px-4 py-3 text-left text-xs font-semibold uppercase text-slate-500">Vencimento</th>
                                         <th class="px-4 py-3 text-left text-xs font-semibold uppercase text-slate-500">Enviado por</th>
@@ -897,6 +1052,11 @@
                                         <tr>
                                             <td class="px-4 py-3 text-sm text-slate-700">{{ $document->title ?: '-' }}</td>
                                             <td class="px-4 py-3 text-sm text-slate-700">{{ $document->original_name ?: '-' }}</td>
+                                            <td class="px-4 py-3 text-sm text-slate-700">
+                                                <span class="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-700">
+                                                    {{ \App\Models\Document::CATEGORIES[$document->category] ?? 'Demais documentos' }}
+                                                </span>
+                                            </td>
                                             <td class="px-4 py-3 text-sm text-slate-700">{{ $document->type ?: '-' }}</td>
                                             <td class="px-4 py-3 text-sm text-slate-700">{{ $document->expiration_date ? \Carbon\Carbon::parse($document->expiration_date)->format('d/m/Y') : '-' }}</td>
                                             <td class="px-4 py-3 text-sm text-slate-700">{{ $document->uploader?->name ?: '-' }}</td>
@@ -923,7 +1083,7 @@
                                         </tr>
                                     @empty
                                         <tr>
-                                            <td colspan="6" class="px-4 py-8 text-center text-sm text-slate-500">Nenhum documento encontrado.</td>
+                                            <td colspan="7" class="px-4 py-8 text-center text-sm text-slate-500">Nenhum documento encontrado.</td>
                                         </tr>
                                     @endforelse
                                 </tbody>
@@ -947,7 +1107,7 @@
 
                                         <div class="space-y-4 p-6">
                                             @for($i = 0; $i < 5; $i++)
-                                                <div class="grid grid-cols-1 gap-4 rounded-2xl border border-slate-200 p-4 md:grid-cols-2 xl:grid-cols-5">
+                                                <div class="grid grid-cols-1 gap-4 rounded-2xl border border-slate-200 p-4 md:grid-cols-2 xl:grid-cols-6">
                                                     <div>
                                                         <label class="mb-1 block text-sm font-medium text-slate-700">Arquivo</label>
                                                         <input type="file" name="files[]" class="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm">
@@ -957,10 +1117,18 @@
                                                         <input type="text" name="title[]" class="w-full rounded-xl border border-slate-300 px-4 py-2.5 text-sm">
                                                     </div>
                                                     <div>
+                                                        <label class="mb-1 block text-sm font-medium text-slate-700">Categoria</label>
+                                                        <select name="category[]" class="w-full rounded-xl border border-slate-300 px-4 py-2.5 text-sm">
+                                                            @foreach(\App\Models\Document::CATEGORIES as $catKey => $catLabel)
+                                                                <option value="{{ $catKey }}" {{ $gedCategory === $catKey ? 'selected' : '' }}>{{ $catLabel }}</option>
+                                                            @endforeach
+                                                        </select>
+                                                    </div>
+                                                    <div>
                                                         <label class="mb-1 block text-sm font-medium text-slate-700">Tipo</label>
                                                         <input type="text" name="type[]" class="w-full rounded-xl border border-slate-300 px-4 py-2.5 text-sm">
                                                     </div>
-                                                    <div class="xl:col-span-2">
+                                                    <div>
                                                         <label class="mb-1 block text-sm font-medium text-slate-700">Descrição</label>
                                                         <input type="text" name="description[]" class="w-full rounded-xl border border-slate-300 px-4 py-2.5 text-sm">
                                                     </div>
@@ -988,6 +1156,30 @@
                         </div>
                     @endcan
                 </div>
+            @endif
+
+            @if ($activeTab === 'financeiro')
+                @include('clients.partials._financeiro')
+            @endif
+
+            @if ($activeTab === 'juridico')
+                @include('clients.partials._juridico')
+            @endif
+
+            @if ($activeTab === 'secretaria')
+                @include('clients.partials._secretaria')
+            @endif
+
+            @if ($activeTab === 'cadastro')
+                @include('clients.partials._cadastro')
+            @endif
+
+            @if ($activeTab === 'tags')
+                @include('clients.partials._tags')
+            @endif
+
+            @if ($activeTab === 'uso_interno')
+                @include('clients.partials._uso_interno')
             @endif
         </div>
     </div>

@@ -13,11 +13,15 @@ class ClientDocumentController extends Controller
     {
         abort_unless(auth()->user()->can('documents.create'), 403);
 
+        $allowedCategories = array_keys(Document::CATEGORIES);
+
         $request->validate([
             'title' => ['nullable', 'array'],
             'title.*' => ['nullable', 'string', 'max:255'],
             'type' => ['nullable', 'array'],
             'type.*' => ['nullable', 'string', 'max:100'],
+            'category' => ['nullable', 'array'],
+            'category.*' => ['nullable', 'string', 'in:' . implode(',', $allowedCategories)],
             'description' => ['nullable', 'array'],
             'description.*' => ['nullable', 'string'],
             'expiration_date' => ['nullable', 'array'],
@@ -38,6 +42,7 @@ class ClientDocumentController extends Controller
 
         $titles = $request->input('title', []);
         $types = $request->input('type', []);
+        $categories = $request->input('category', []);
         $descriptions = $request->input('description', []);
         $expirationDates = $request->input('expiration_date', []);
 
@@ -53,6 +58,9 @@ class ClientDocumentController extends Controller
                 'client_id' => $client->id,
                 'title' => $titles[$index] ?? pathinfo($originalName, PATHINFO_FILENAME),
                 'type' => $types[$index] ?? null,
+                'category' => in_array($categories[$index] ?? null, $allowedCategories, true)
+                    ? $categories[$index]
+                    : 'demais',
                 'description' => $descriptions[$index] ?? null,
                 'expiration_date' => $expirationDates[$index] ?? null,
                 'status' => true,

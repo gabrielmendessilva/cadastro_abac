@@ -4,6 +4,7 @@
   "description": "Sistema de cadastro online com GED por cliente em Abac.",
   "require": {
     "php": "^8.2",
+    "doctrine/dbal": "^4.4",
     "laravel/framework": "^12.0",
     "laravel/tinker": "^2.10",
     "spatie/laravel-permission": "^6.12"

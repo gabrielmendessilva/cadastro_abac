@@ -62,25 +62,35 @@ class ClientController extends Controller
     public function show(Request $request, Client $client)
     {
         abort_unless(auth()->user()->can('clients.view'), 403);
-    
+
         $activeTab = $request->get('tab', 'geral');
-    
-        $allowedTabs = ['geral', 'enderecos', 'contatos', 'opcionais'];
-    
+        $activeSubtab = $request->get('subtab');
+
+        $allowedTabs = [
+            'geral', 'financeiro', 'juridico', 'secretaria',
+            'cadastro', 'enderecos', 'contatos', 'opcionais',
+            'tags', 'uso_interno',
+        ];
+
         if (auth()->user()->can('documents.view')) {
             $allowedTabs[] = 'ged';
         }
-    
+
         if (!in_array($activeTab, $allowedTabs, true)) {
             abort(403);
         }
-    
+
+        $gedCategory = $activeTab === 'ged' && in_array($activeSubtab, array_keys(\App\Models\Document::CATEGORIES), true)
+            ? $activeSubtab
+            : null;
+
         $documents = auth()->user()->can('documents.view')
             ? $client->documents()
                 ->with('uploader')
+                ->when($gedCategory, fn($q) => $q->where('category', $gedCategory))
                 ->when($request->filled('document_search'), function ($query) use ($request) {
                     $search = $request->document_search;
-    
+
                     $query->where(function ($subQuery) use ($search) {
                         $subQuery->where('title', 'like', "%{$search}%")
                             ->orWhere('original_name', 'like', "%{$search}%")
@@ -144,13 +154,37 @@ class ClientController extends Controller
             ->paginate(10, ['*'], 'opcionais_page')
             ->withQueryString();
     
+        $client->load([
+            'filiacoesHistorico',
+            'redesSociais',
+            'contratos',
+            'socios',
+            'juridicoContatos',
+            'comites.contato',
+            'tags',
+        ]);
+
+        $allTags = \App\Models\Tag::orderBy('nome')->get();
+
+        $auditLogs = $activeTab === 'uso_interno'
+            ? $client->auditLogs()
+                ->with('user:id,name')
+                ->latest('created_at')
+                ->paginate(25, ['*'], 'audit_page')
+                ->withQueryString()
+            : collect();
+
         return view('clients.show', compact(
             'client',
             'documents',
             'addresses',
             'contacts',
             'opcionais',
-            'activeTab'
+            'activeTab',
+            'activeSubtab',
+            'gedCategory',
+            'allTags',
+            'auditLogs'
         ));
     }
     

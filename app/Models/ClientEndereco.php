@@ -10,6 +10,7 @@ class ClientEndereco extends Model
 
     protected $fillable = [
         'client_id',
+        'tipo',
         'cep',
         'rua',
         'numero',
@@ -19,6 +20,12 @@ class ClientEndereco extends Model
         'estado',
         'cod_ibge',
         'municipio',
+    ];
+
+    public const TIPOS = [
+        'principal' => 'Principal',
+        'secundario' => 'Secundário',
+        'outro' => 'Outro',
     ];
 
     public function client()

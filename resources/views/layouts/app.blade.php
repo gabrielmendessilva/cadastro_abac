@@ -21,6 +21,7 @@
                 <a href="{{ route('dashboard') }}" class="block rounded-xl px-4 py-3 hover:bg-slate-800 {{ request()->routeIs('dashboard') ? 'bg-slate-800' : '' }}">Dashboard</a>
                 @can('clients.view')
                     <a href="{{ route('clients.index') }}" class="block rounded-xl px-4 py-3 hover:bg-slate-800 {{ request()->routeIs('clients.*') ? 'bg-slate-800' : '' }}">Clientes</a>
+                    <a href="{{ route('listas.index') }}" class="block rounded-xl px-4 py-3 hover:bg-slate-800 {{ request()->routeIs('listas.*') ? 'bg-slate-800' : '' }}">Listas</a>
                 @endcan
                 {{-- @can('documents.view')
                     <a href="{{ route('documents.index') }}" class="block rounded-xl px-4 py-3 hover:bg-slate-800 {{ request()->routeIs('documents.*') ? 'bg-slate-800' : '' }}">GED</a>

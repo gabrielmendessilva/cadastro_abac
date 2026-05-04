@@ -14,20 +14,13 @@ class StoreClientRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'name' => ['required', 'string', 'max:255'],
-            'fantasy_name' => ['nullable', 'string', 'max:255'],
-            'document' => ['required', 'string', 'max:20', 'unique:clients,document'],
-            'email' => ['nullable', 'email', 'max:255'],
-            'phone' => ['nullable', 'string', 'max:20'],
-            'mobile' => ['nullable', 'string', 'max:20'],
-            'zipcode' => ['nullable', 'string', 'max:10'],
-            'address' => ['nullable', 'string', 'max:255'],
-            'number' => ['nullable', 'string', 'max:20'],
-            'complement' => ['nullable', 'string', 'max:255'],
-            'district' => ['nullable', 'string', 'max:255'],
-            'city' => ['nullable', 'string', 'max:255'],
-            'state' => ['nullable', 'string', 'size:2'],
-            'notes' => ['nullable', 'string'],
+            'nome' => ['required', 'string', 'max:255'],
+            'cpf_cnpj' => ['nullable', 'string', 'max:20'],
+            'cod_omie' => ['nullable', 'string', 'max:50'],
+            'nome_fantasia' => ['nullable', 'string', 'max:255'],
+            'categoria' => ['nullable', 'string', 'max:100'],
+            'regional' => ['nullable', 'string', 'max:100'],
+            'tipo_cliente' => ['nullable', 'string', 'max:50'],
             'status' => ['nullable', 'boolean'],
         ];
     }

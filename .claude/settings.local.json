@@ -1,0 +1,31 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(pandoc --track-changes=all \"/Users/gabrielmendes/Downloads/Cadastro.docx\" -o /tmp/cadastro.md)",
+      "Read(//tmp/**)",
+      "Bash(python3 \"/Users/gabrielmendes/Library/Application Support/Claude/local-agent-mode-sessions/skills-plugin/121aec1c-2427-4162-8b1c-a6f4b0f53e54/9fb66bf6-84a2-4d0c-ae7b-c7aad52a2909/skills/docx/scripts/office/unpack.py\" \"/Users/gabrielmendes/Downloads/Cadastro.docx\" /tmp/cadastro_unpacked)",
+      "Bash(git add *)",
+      "Bash(git reset *)",
+      "Bash(php -l resources/views/clients/show.blade.php)",
+      "Bash(php -l resources/views/clients/edit.blade.php)",
+      "Bash(php -l resources/views/clients/partials/_sidebar.blade.php)",
+      "Bash(php -l app/Http/Controllers/ClientController.php)",
+      "Bash(php -l app/Http/Controllers/ClientDocumentController.php)",
+      "Bash(php artisan *)",
+      "Bash(php -l app/Http/Controllers/ClientFiliacaoController.php)",
+      "Bash(php -l app/Http/Controllers/ClientRedeSocialController.php)",
+      "Bash(php -l app/Http/Controllers/ClientContratoController.php)",
+      "Bash(php -l app/Http/Controllers/ClientSocioController.php)",
+      "Bash(php -l app/Http/Controllers/ClientJuridicoContatoController.php)",
+      "Bash(php -l app/Http/Controllers/ClientComiteController.php)",
+      "Bash(php -l app/Http/Controllers/ClientTagController.php)",
+      "Bash(php -l app/Http/Controllers/ListaController.php)",
+      "Bash(php -l app/Models/Client.php)",
+      "Bash(php -l app/Observers/ClientObserver.php)",
+      "Bash(php -l app/Http/Requests/UpdateClientRequest.php)",
+      "Bash(php -l routes/web.php)",
+      "Bash(composer show *)",
+      "Bash(composer require *)"
+    ]
+  }
+}
