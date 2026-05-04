@@ -25,7 +25,8 @@
       "Bash(php -l app/Http/Requests/UpdateClientRequest.php)",
       "Bash(php -l routes/web.php)",
       "Bash(composer show *)",
-      "Bash(composer require *)"
+      "Bash(composer require *)",
+      "Bash(chmod +x /Users/gabrielmendes/Downloads/mnt/data/laravel-ged-crud/deploy.sh)"
     ]
   }
 }
