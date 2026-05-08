@@ -45,17 +45,27 @@
 
         <div class="flex-1 overflow-hidden rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
             @if ($activeTab === 'geral')
-                <div x-data="{ openOpcionais: false }" class="space-y-6">
+                <div x-data="{ openOpcionais: false, openAbac: false, openSinac: false }" class="space-y-6">
                     <div class="flex items-start justify-between gap-3">
                         <div>
                             <h2 class="text-lg font-semibold text-slate-900">Dados gerais</h2>
                             <p class="text-sm text-slate-500">Informações principais do cliente.</p>
                         </div>
                         @can('clients.edit')
-                            <button type="button" @click="openOpcionais = true"
-                                    class="inline-flex items-center gap-1 rounded-lg border border-blue-300 bg-blue-50 px-3 py-1.5 text-sm font-medium text-blue-700 hover:bg-blue-100">
-                                ➕ Opcionais
-                            </button>
+                            <div class="flex flex-wrap gap-2">
+                                <button type="button" @click="openAbac = true"
+                                        class="inline-flex items-center gap-1 rounded-lg border border-blue-300 bg-blue-50 px-3 py-1.5 text-sm font-medium text-blue-700 hover:bg-blue-100">
+                                    🔵 Filiação ABAC
+                                </button>
+                                <button type="button" @click="openSinac = true"
+                                        class="inline-flex items-center gap-1 rounded-lg border border-purple-300 bg-purple-50 px-3 py-1.5 text-sm font-medium text-purple-700 hover:bg-purple-100">
+                                    🟣 Filiação SINAC
+                                </button>
+                                <button type="button" @click="openOpcionais = true"
+                                        class="inline-flex items-center gap-1 rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50">
+                                    ➕ Opcionais
+                                </button>
+                            </div>
                         @endcan
                     </div>
 
@@ -97,6 +107,7 @@
                                 'E-mail 5' => $client->email_5,
                                 'E-mail 6' => $client->email_6,
                                 'E-mail 7' => $client->email_7,
+                                'Associado ABAC' => $client->associado_abac ? 'Sim' : 'Não',
                             ];
                         @endphp
 
@@ -119,188 +130,137 @@
                         @endforeach
                     </div>
 
-                    {{-- Histórico ABAC --}}
-                    <div class="rounded-2xl border border-slate-200 bg-white p-5">
-                        <div class="mb-4 grid grid-cols-1 gap-4 md:grid-cols-4">
-                            <div>
-                                <p class="text-xs uppercase text-slate-500">Associado ABAC</p>
-                                <p class="text-sm font-semibold">{{ $client->associado_abac ? 'Sim' : 'Não' }}</p>
-                            </div>
-                            <div>
-                                <p class="text-xs uppercase text-slate-500">Nº filiação atual</p>
-                                <p class="text-sm font-semibold">{{ $client->num_filiacao_abac ?: '-' }}</p>
-                            </div>
-                            <div>
-                                <p class="text-xs uppercase text-slate-500">Data filiação</p>
-                                <p class="text-sm font-semibold">{{ $client->dt_filiacao_abac?->format('d/m/Y') ?: '-' }}</p>
-                            </div>
-                            <div>
-                                <p class="text-xs uppercase text-slate-500">Data desfiliação</p>
-                                <p class="text-sm font-semibold">{{ $client->dt_desfiliacao_abac?->format('d/m/Y') ?: '-' }}</p>
-                            </div>
-                        </div>
-                        @include('clients.partials._filiacoes', ['tipo' => 'abac'])
-                    </div>
-
-                    {{-- Histórico SINAC --}}
-                    <div class="rounded-2xl border border-slate-200 bg-white p-5">
-                        <div class="mb-4 grid grid-cols-1 gap-4 md:grid-cols-4">
-                            <div>
-                                <p class="text-xs uppercase text-slate-500">Associado SINAC</p>
-                                <p class="text-sm font-semibold">{{ $client->associado_sinac ? 'Sim' : 'Não' }}</p>
-                            </div>
-                            <div>
-                                <p class="text-xs uppercase text-slate-500">Nº filiação atual</p>
-                                <p class="text-sm font-semibold">{{ $client->num_filiacao_sinac ?: '-' }}</p>
-                            </div>
-                            <div>
-                                <p class="text-xs uppercase text-slate-500">Data filiação</p>
-                                <p class="text-sm font-semibold">{{ $client->dt_filiacao_sinac?->format('d/m/Y') ?: '-' }}</p>
-                            </div>
-                            <div>
-                                <p class="text-xs uppercase text-slate-500">Data desfiliação</p>
-                                <p class="text-sm font-semibold">{{ $client->dt_desfiliacao_sinac?->format('d/m/Y') ?: '-' }}</p>
-                            </div>
-                        </div>
-                        @include('clients.partials._filiacoes', ['tipo' => 'sinac'])
-                    </div>
-
-                    {{-- Redes sociais --}}
-                    <div x-data="{ openRede: false }" class="rounded-2xl border border-slate-200 bg-white p-5">
-                        <div class="mb-3 flex items-center justify-between">
-                            <h3 class="text-sm font-semibold text-slate-700">Redes sociais</h3>
-                            @can('clients.edit')
-                                <button @click="openRede = true"
-                                        class="rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-700">
-                                    + Adicionar rede
-                                </button>
-                            @endcan
-                        </div>
-
-                        @if ($client->redesSociais->isEmpty())
-                            <p class="rounded-lg border border-dashed border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-500">Nenhuma rede social cadastrada.</p>
-                        @else
-                            <div class="grid grid-cols-1 gap-2 md:grid-cols-2">
-                                @foreach ($client->redesSociais as $rede)
-                                    <div class="flex items-center justify-between gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-sm">
-                                        <div class="min-w-0 flex-1">
-                                            <span class="rounded-full bg-blue-100 px-2 py-0.5 text-xs text-blue-700">{{ \App\Models\ClientRedeSocial::TIPOS[$rede->tipo] }}</span>
-                                            @if ($rede->rotulo)
-                                                <span class="text-xs text-slate-500">· {{ $rede->rotulo }}</span>
-                                            @endif
-                                            <a href="{{ $rede->url }}" target="_blank" rel="noopener"
-                                               class="ml-2 break-all text-blue-600 hover:underline">{{ $rede->url }}</a>
+                    {{-- Modal: Filiação ABAC --}}
+                    @can('clients.edit')
+                        <div x-show="openAbac" x-cloak class="fixed inset-0 z-[9999] overflow-y-auto bg-black/50">
+                            <div class="flex min-h-full items-center justify-center p-4">
+                                <div @click.away="openAbac = false" class="relative my-8 w-full max-w-3xl rounded-2xl bg-white shadow-2xl max-h-[90vh] overflow-y-auto">
+                                    <form method="POST" action="{{ route('clients.update', $client) }}">
+                                        @csrf @method('PUT')
+                                        <div class="border-b border-slate-200 px-6 py-4">
+                                            <h3 class="text-lg font-semibold text-slate-900">Filiação ABAC</h3>
+                                            <p class="text-xs text-slate-500">Status, números e datas da filiação ABAC do cliente.</p>
                                         </div>
-                                        @can('clients.edit')
-                                            <form method="POST" action="{{ route('clients.redes.destroy', [$client, $rede]) }}">
-                                                @csrf @method('DELETE')
-                                                <button onclick="return confirm('Remover?')"
-                                                        class="rounded-lg border border-red-200 px-2 py-0.5 text-xs text-red-600 hover:bg-red-50">×</button>
-                                            </form>
-                                        @endcan
-                                    </div>
-                                @endforeach
-                            </div>
-                        @endif
 
-                        @can('clients.edit')
-                            <div x-show="openRede" x-cloak class="fixed inset-0 z-[9999] overflow-y-auto bg-black/50">
-                                <div class="flex min-h-full items-center justify-center p-4">
-                                    <div @click.away="openRede = false" class="w-full max-w-xl rounded-2xl bg-white shadow-2xl">
-                                        <form method="POST" action="{{ route('clients.redes.store', $client) }}">
-                                            @csrf
-                                            <div class="border-b border-slate-200 px-6 py-4">
-                                                <h3 class="text-lg font-semibold text-slate-900">Adicionar rede social</h3>
+                                        <div class="space-y-5 p-6">
+                                            <div class="rounded-xl border border-slate-200 p-4">
+                                                <label class="flex items-center gap-2 text-sm font-medium text-slate-700">
+                                                    <input type="checkbox" name="associado_abac" value="1" @checked($client->associado_abac) class="rounded">
+                                                    Associado ABAC
+                                                </label>
                                             </div>
-                                            <div class="grid grid-cols-1 gap-4 p-6 md:grid-cols-2">
+
+                                            <div class="grid grid-cols-1 gap-4 md:grid-cols-2">
                                                 <div>
-                                                    <label class="mb-1 block text-sm font-medium text-slate-700">Tipo *</label>
-                                                    <select name="tipo" required class="w-full rounded-xl border border-slate-300 px-4 py-2.5 text-sm">
-                                                        @foreach (\App\Models\ClientRedeSocial::TIPOS as $key => $label)
-                                                            <option value="{{ $key }}">{{ $label }}</option>
-                                                        @endforeach
-                                                    </select>
+                                                    <label class="mb-1 block text-xs font-medium text-slate-600">Nº filiação atual</label>
+                                                    <input type="text" name="num_filiacao_abac" value="{{ $client->num_filiacao_abac }}" class="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm">
                                                 </div>
                                                 <div>
-                                                    <label class="mb-1 block text-sm font-medium text-slate-700">Rótulo</label>
-                                                    <input type="text" name="rotulo" placeholder="Ex.: Perfil oficial" class="w-full rounded-xl border border-slate-300 px-4 py-2.5 text-sm">
+                                                    <label class="mb-1 block text-xs font-medium text-slate-600">Data de filiação</label>
+                                                    <input type="date" name="dt_filiacao_abac" value="{{ $client->dt_filiacao_abac?->format('Y-m-d') }}" class="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm">
+                                                </div>
+                                                <div>
+                                                    <label class="mb-1 block text-xs font-medium text-slate-600">Data de desfiliação</label>
+                                                    <input type="date" name="dt_desfiliacao_abac" value="{{ $client->dt_desfiliacao_abac?->format('Y-m-d') }}" class="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm">
+                                                </div>
+                                                <div>
+                                                    <label class="mb-1 block text-xs font-medium text-slate-600">Motivo da desfiliação</label>
+                                                    <input type="text" name="motivo_desfiliacao_abac" value="{{ $client->motivo_desfiliacao_abac }}" class="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm">
                                                 </div>
                                                 <div class="md:col-span-2">
-                                                    <label class="mb-1 block text-sm font-medium text-slate-700">URL *</label>
-                                                    <input type="url" name="url" required class="w-full rounded-xl border border-slate-300 px-4 py-2.5 text-sm">
+                                                    <label class="mb-1 block text-xs font-medium text-slate-600">Observações ABAC</label>
+                                                    <textarea name="obs_abac" rows="3" class="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm">{{ $client->obs_abac }}</textarea>
                                                 </div>
                                             </div>
-                                            <div class="flex justify-end gap-3 border-t border-slate-200 px-6 py-4">
-                                                <button type="button" @click="openRede = false" class="rounded-xl border border-slate-300 px-4 py-2 text-sm">Cancelar</button>
-                                                <button class="rounded-xl bg-blue-600 px-4 py-2 text-sm text-white hover:bg-blue-700">Salvar</button>
+
+                                            {{-- Filiações anteriores --}}
+                                            <div class="rounded-xl border border-slate-200 p-4">
+                                                @include('clients.partials._filiacoes', ['tipo' => 'abac'])
                                             </div>
-                                        </form>
-                                    </div>
+                                        </div>
+
+                                        <div class="sticky bottom-0 flex justify-end gap-3 border-t border-slate-200 bg-white px-6 py-4">
+                                            <button type="button" @click="openAbac = false" class="rounded-xl border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700">Cancelar</button>
+                                            <button type="submit" class="rounded-xl bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700">Salvar</button>
+                                        </div>
+                                    </form>
                                 </div>
                             </div>
-                        @endcan
-                    </div>
+                        </div>
+                    @endcan
 
-                    {{-- Modal: Opcionais (datas, motivos, observações) --}}
+                    {{-- Modal: Filiação SINAC --}}
+                    @can('clients.edit')
+                        <div x-show="openSinac" x-cloak class="fixed inset-0 z-[9999] overflow-y-auto bg-black/50">
+                            <div class="flex min-h-full items-center justify-center p-4">
+                                <div @click.away="openSinac = false" class="relative my-8 w-full max-w-3xl rounded-2xl bg-white shadow-2xl max-h-[90vh] overflow-y-auto">
+                                    <form method="POST" action="{{ route('clients.update', $client) }}">
+                                        @csrf @method('PUT')
+                                        <div class="border-b border-slate-200 px-6 py-4">
+                                            <h3 class="text-lg font-semibold text-slate-900">Filiação SINAC</h3>
+                                            <p class="text-xs text-slate-500">Status, números e datas da filiação SINAC do cliente.</p>
+                                        </div>
+
+                                        <div class="space-y-5 p-6">
+                                            <div class="rounded-xl border border-slate-200 p-4">
+                                                <label class="flex items-center gap-2 text-sm font-medium text-slate-700">
+                                                    <input type="checkbox" name="associado_sinac" value="1" @checked($client->associado_sinac) class="rounded">
+                                                    Associado SINAC
+                                                </label>
+                                            </div>
+
+                                            <div class="grid grid-cols-1 gap-4 md:grid-cols-2">
+                                                <div>
+                                                    <label class="mb-1 block text-xs font-medium text-slate-600">Nº filiação atual</label>
+                                                    <input type="text" name="num_filiacao_sinac" value="{{ $client->num_filiacao_sinac }}" class="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm">
+                                                </div>
+                                                <div>
+                                                    <label class="mb-1 block text-xs font-medium text-slate-600">Data de filiação</label>
+                                                    <input type="date" name="dt_filiacao_sinac" value="{{ $client->dt_filiacao_sinac?->format('Y-m-d') }}" class="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm">
+                                                </div>
+                                                <div>
+                                                    <label class="mb-1 block text-xs font-medium text-slate-600">Data de desfiliação</label>
+                                                    <input type="date" name="dt_desfiliacao_sinac" value="{{ $client->dt_desfiliacao_sinac?->format('Y-m-d') }}" class="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm">
+                                                </div>
+                                                <div>
+                                                    <label class="mb-1 block text-xs font-medium text-slate-600">Motivo da desfiliação</label>
+                                                    <input type="text" name="motivo_desfiliacao_sinac" value="{{ $client->motivo_desfiliacao_sinac }}" class="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm">
+                                                </div>
+                                                <div class="md:col-span-2">
+                                                    <label class="mb-1 block text-xs font-medium text-slate-600">Observações SINAC</label>
+                                                    <textarea name="obs_sinac" rows="3" class="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm">{{ $client->obs_sinac }}</textarea>
+                                                </div>
+                                            </div>
+
+                                            {{-- Filiações anteriores --}}
+                                            <div class="rounded-xl border border-slate-200 p-4">
+                                                @include('clients.partials._filiacoes', ['tipo' => 'sinac'])
+                                            </div>
+                                        </div>
+
+                                        <div class="sticky bottom-0 flex justify-end gap-3 border-t border-slate-200 bg-white px-6 py-4">
+                                            <button type="button" @click="openSinac = false" class="rounded-xl border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700">Cancelar</button>
+                                            <button type="submit" class="rounded-xl bg-purple-600 px-4 py-2 text-sm font-medium text-white hover:bg-purple-700">Salvar</button>
+                                        </div>
+                                    </form>
+                                </div>
+                            </div>
+                        </div>
+                    @endcan
+
+                    {{-- Modal: Opcionais (datas da empresa + observações) --}}
                     @can('clients.edit')
                         <div x-show="openOpcionais" x-cloak class="fixed inset-0 z-[9999] overflow-y-auto bg-black/50">
                             <div class="flex min-h-full items-center justify-center p-4">
-                                <div @click.away="openOpcionais = false" class="relative my-8 w-full max-w-3xl rounded-2xl bg-white shadow-2xl max-h-[90vh] overflow-y-auto">
+                                <div @click.away="openOpcionais = false" class="relative my-8 w-full max-w-2xl rounded-2xl bg-white shadow-2xl max-h-[90vh] overflow-y-auto">
                                     <form method="POST" action="{{ route('clients.update', $client) }}">
                                         @csrf @method('PUT')
                                         <div class="border-b border-slate-200 px-6 py-4">
                                             <h3 class="text-lg font-semibold text-slate-900">Opcionais</h3>
-                                            <p class="text-xs text-slate-500">Filiações, datas da empresa e observações. Para outros números/datas anteriores, use o botão "+ Adicionar filiação anterior" abaixo.</p>
+                                            <p class="text-xs text-slate-500">Datas da empresa e observações gerais.</p>
                                         </div>
 
                                         <div class="space-y-5 p-6">
-                                            {{-- ABAC --}}
-                                            <div class="rounded-xl border border-slate-200 p-4">
-                                                <h4 class="mb-3 text-sm font-semibold text-slate-700">Filiação ABAC</h4>
-                                                <div class="grid grid-cols-1 gap-4 md:grid-cols-2">
-                                                    <div>
-                                                        <label class="mb-1 block text-xs font-medium text-slate-600">Nº filiação</label>
-                                                        <input type="text" name="num_filiacao_abac" value="{{ $client->num_filiacao_abac }}" class="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm">
-                                                    </div>
-                                                    <div>
-                                                        <label class="mb-1 block text-xs font-medium text-slate-600">Data de filiação</label>
-                                                        <input type="date" name="dt_filiacao_abac" value="{{ $client->dt_filiacao_abac?->format('Y-m-d') }}" class="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm">
-                                                    </div>
-                                                    <div>
-                                                        <label class="mb-1 block text-xs font-medium text-slate-600">Data de desfiliação</label>
-                                                        <input type="date" name="dt_desfiliacao_abac" value="{{ $client->dt_desfiliacao_abac?->format('Y-m-d') }}" class="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm">
-                                                    </div>
-                                                    <div>
-                                                        <label class="mb-1 block text-xs font-medium text-slate-600">Motivo da desfiliação</label>
-                                                        <input type="text" name="motivo_desfiliacao_abac" value="{{ $client->motivo_desfiliacao_abac }}" class="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm">
-                                                    </div>
-                                                </div>
-                                            </div>
-
-                                            {{-- SINAC --}}
-                                            <div class="rounded-xl border border-slate-200 p-4">
-                                                <h4 class="mb-3 text-sm font-semibold text-slate-700">Filiação SINAC</h4>
-                                                <div class="grid grid-cols-1 gap-4 md:grid-cols-2">
-                                                    <div>
-                                                        <label class="mb-1 block text-xs font-medium text-slate-600">Nº filiação</label>
-                                                        <input type="text" name="num_filiacao_sinac" value="{{ $client->num_filiacao_sinac }}" class="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm">
-                                                    </div>
-                                                    <div>
-                                                        <label class="mb-1 block text-xs font-medium text-slate-600">Data de filiação</label>
-                                                        <input type="date" name="dt_filiacao_sinac" value="{{ $client->dt_filiacao_sinac?->format('Y-m-d') }}" class="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm">
-                                                    </div>
-                                                    <div>
-                                                        <label class="mb-1 block text-xs font-medium text-slate-600">Data de desfiliação</label>
-                                                        <input type="date" name="dt_desfiliacao_sinac" value="{{ $client->dt_desfiliacao_sinac?->format('Y-m-d') }}" class="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm">
-                                                    </div>
-                                                    <div>
-                                                        <label class="mb-1 block text-xs font-medium text-slate-600">Motivo da desfiliação</label>
-                                                        <input type="text" name="motivo_desfiliacao_sinac" value="{{ $client->motivo_desfiliacao_sinac }}" class="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm">
-                                                    </div>
-                                                </div>
-                                            </div>
-
-                                            {{-- Datas da empresa --}}
                                             <div class="rounded-xl border border-slate-200 p-4">
                                                 <h4 class="mb-3 text-sm font-semibold text-slate-700">Datas da empresa</h4>
                                                 <div class="grid grid-cols-1 gap-4 md:grid-cols-2">
@@ -315,7 +275,6 @@
                                                 </div>
                                             </div>
 
-                                            {{-- Observações --}}
                                             <div class="rounded-xl border border-slate-200 p-4">
                                                 <label class="mb-1 block text-sm font-semibold text-slate-700">Observações</label>
                                                 <textarea name="obs" rows="4" class="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm">{{ $client->obs }}</textarea>

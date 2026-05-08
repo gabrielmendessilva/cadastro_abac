@@ -1,7 +1,7 @@
 @php
     $cadastroChildren = [
         ['key' => 'informacoes',   'tab' => 'cadastro', 'label' => 'Informações da empresa'],
-        ['key' => 'departamentos', 'tab' => 'cadastro', 'label' => 'Departamentos'],
+        ['key' => null,            'tab' => 'contatos', 'label' => 'Departamentos / Contatos'],
         ['key' => 'comites',       'tab' => 'cadastro', 'label' => 'Comitês'],
         ['key' => 'sociedade',     'tab' => 'cadastro', 'label' => 'Sócio / Administrador'],
         ['key' => null,            'tab' => 'ged',      'label' => 'Documentos', 'permission' => 'documents.view'],
@@ -15,7 +15,6 @@
     $tabs = [
         ['key' => 'geral',       'label' => 'Geral',       'icon' => '👤', 'permission' => null],
         ['key' => 'enderecos',   'label' => 'Endereços',   'icon' => '📍', 'permission' => null],
-        ['key' => 'contatos',    'label' => 'Contatos',    'icon' => '📇', 'permission' => null],
         ['key' => 'financeiro',  'label' => 'Financeiro',  'icon' => '💰', 'permission' => null],
         ['key' => 'juridico',    'label' => 'Jurídico',    'icon' => '⚖️', 'permission' => null],
         ['key' => 'secretaria',  'label' => 'Secretaria',  'icon' => '🗂️', 'permission' => null],
@@ -32,7 +31,7 @@
 
     // Determina qual grupo deve abrir por padrão
     $defaultGroup = $activeTab;
-    if ($activeTab === 'ged' && $activeSubtab === null) {
+    if (in_array($activeTab, ['ged', 'contatos'], true)) {
         $defaultGroup = 'cadastro';
     }
 @endphp
@@ -46,7 +45,7 @@
             @endif
 
             @php
-                $isActive = $activeTab === $tab['key'] || ($tab['key'] === 'cadastro' && $activeTab === 'ged');
+                $isActive = $activeTab === $tab['key'] || ($tab['key'] === 'cadastro' && in_array($activeTab, ['ged', 'contatos'], true));
                 $hasChildren = !empty($tab['children']);
             @endphp
 

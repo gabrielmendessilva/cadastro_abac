@@ -14,7 +14,6 @@
         @php
             $subAbas = [
                 'informacoes' => 'Informações da empresa',
-                'departamentos' => 'Departamentos',
                 'comites' => 'Comitês',
                 'sociedade' => 'Sócio / Administrador',
             ];
@@ -25,6 +24,10 @@
                 {{ $label }}
             </a>
         @endforeach
+        <a href="{{ route('clients.show', ['client' => $client, 'tab' => 'contatos']) }}"
+           class="rounded-full border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50">
+            Departamentos / Contatos →
+        </a>
         @can('documents.view')
             <a href="{{ route('clients.show', ['client' => $client, 'tab' => 'ged']) }}"
                class="rounded-full border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50">
@@ -59,41 +62,9 @@
                 </div>
             @endcan
         </form>
-    @endif
 
-    @if ($subtab === 'departamentos')
-        <div class="rounded-2xl border border-slate-200 bg-white p-5">
-            <div class="mb-3 flex items-center justify-between">
-                <div>
-                    <h3 class="text-sm font-semibold text-slate-700">Departamentos / contatos da empresa</h3>
-                    <p class="text-xs text-slate-500">Cada contato pertence a um departamento. Gerencie pela aba <strong>Contatos</strong>.</p>
-                </div>
-                <a href="{{ route('clients.show', ['client' => $client, 'tab' => 'contatos']) }}"
-                   class="rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50">
-                    Ir para Contatos →
-                </a>
-            </div>
-
-            @php
-                $departamentos = $client->contatos
-                    ->groupBy(fn($c) => $c->departamento ?: 'Sem departamento')
-                    ->map->count();
-            @endphp
-
-            @if ($departamentos->isEmpty())
-                <p class="rounded-lg border border-dashed border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-500">
-                    Nenhum contato cadastrado ainda.
-                </p>
-            @else
-                <div class="flex flex-wrap gap-2">
-                    @foreach ($departamentos as $depNome => $qtd)
-                        <span class="rounded-full bg-slate-100 px-3 py-1 text-xs text-slate-700">
-                            {{ $depNome }} <span class="text-slate-400">· {{ $qtd }}</span>
-                        </span>
-                    @endforeach
-                </div>
-            @endif
-        </div>
+        {{-- Redes sociais (movido da aba Geral) --}}
+        @include('clients.partials._redes_sociais')
     @endif
 
     @if ($subtab === 'comites')
