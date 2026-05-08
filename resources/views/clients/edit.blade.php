@@ -101,10 +101,6 @@
                         <label class="mb-1 block text-sm font-medium text-slate-700">Status da empresa</label>
                         <input type="text" name="status_empresa" value="{{ old('status_empresa', $client->status_empresa) }}" class="w-full rounded-xl border border-slate-300 px-4 py-2.5 text-sm">
                     </div>
-                    <label class="flex items-center gap-2 text-sm">
-                        <input type="checkbox" name="autenticacao_whatsapp" value="1" @checked(old('autenticacao_whatsapp', $client->autenticacao_whatsapp)) class="rounded">
-                        Autenticação WhatsApp
-                    </label>
                 </div>
             </div>
 

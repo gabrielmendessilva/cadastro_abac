@@ -8,16 +8,25 @@ use Illuminate\Http\Request;
 
 class ClientSocioController extends Controller
 {
+    private function rules(): array
+    {
+        return [
+            'papel' => ['required', 'in:socio,administrador'],
+            'nome' => ['required', 'string', 'max:255'],
+            'email' => ['nullable', 'email', 'max:255'],
+            'telefone' => ['nullable', 'string', 'max:30'],
+            'quota_participacao' => ['nullable', 'numeric', 'between:0,100'],
+            'mandato_inicio' => ['nullable', 'date'],
+            'mandato_termino' => ['nullable', 'date', 'after_or_equal:mandato_inicio'],
+            'observacoes' => ['nullable', 'string'],
+        ];
+    }
+
     public function store(Request $request, Client $client)
     {
         abort_unless(auth()->user()->can('clients.edit'), 403);
 
-        $data = $request->validate([
-            'papel' => ['required', 'in:socio,administrador'],
-            'nome' => ['required', 'string', 'max:255'],
-            'cpf_cnpj' => ['nullable', 'string', 'max:20'],
-            'observacoes' => ['nullable', 'string'],
-        ]);
+        $data = $request->validate($this->rules());
 
         $client->socios()->create($data);
 
@@ -29,12 +38,7 @@ class ClientSocioController extends Controller
         abort_unless(auth()->user()->can('clients.edit'), 403);
         abort_if($socio->client_id !== $client->id, 404);
 
-        $data = $request->validate([
-            'papel' => ['required', 'in:socio,administrador'],
-            'nome' => ['required', 'string', 'max:255'],
-            'cpf_cnpj' => ['nullable', 'string', 'max:20'],
-            'observacoes' => ['nullable', 'string'],
-        ]);
+        $data = $request->validate($this->rules());
 
         $socio->update($data);
 

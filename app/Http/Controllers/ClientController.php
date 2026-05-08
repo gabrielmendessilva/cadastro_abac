@@ -132,8 +132,7 @@ class ClientController extends Controller
                         ->orWhere('telefone', 'like', "%{$search}%")
                         ->orWhere('telefone_2', 'like', "%{$search}%")
                         ->orWhere('funcao', 'like', "%{$search}%")
-                        ->orWhere('departamento', 'like', "%{$search}%")
-                        ->orWhere('outro_departamento', 'like', "%{$search}%");
+                        ->orWhere('departamento', 'like', "%{$search}%");
                 });
             })
             ->latest()
@@ -201,7 +200,7 @@ class ClientController extends Controller
         abort_unless(auth()->user()->can('clients.edit'), 403);
 
         $client->update($request->validated() + [
-            'status' => $request->boolean('status', true),
+            'status' => $request->boolean('status', $client->status),
             'updated_by' => auth()->id(),
         ]);
 

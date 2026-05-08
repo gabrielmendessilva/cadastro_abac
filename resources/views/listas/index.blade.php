@@ -21,7 +21,7 @@
             @php
                 $abas = [
                     'mandatos' => '📅 Mandatos próximos',
-                    'comites' => '👥 Integrantes de comitês',
+                    'integrantes_comites' => '👥 Integrantes de comitês',
                 ];
             @endphp
             <nav class="sticky top-4 flex flex-col gap-1 rounded-2xl border border-slate-200 bg-white p-2 shadow-sm">
@@ -85,7 +85,7 @@
                 </div>
             @endif
 
-            @if ($aba === 'comites')
+            @if ($aba === 'integrantes_comites')
                 <div class="rounded-2xl border border-slate-200 bg-white p-5">
                     <h2 class="mb-3 text-lg font-semibold text-slate-900">Integrantes de comitês</h2>
                     @if ($integrantesComites->isEmpty())

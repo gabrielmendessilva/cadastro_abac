@@ -22,7 +22,6 @@ class ClientContato extends Model
         'celular',
         'obs',
         'departamento',
-        'outro_departamento',
         'representante_legal',
         'comite',
         'unlock_whatsApp',

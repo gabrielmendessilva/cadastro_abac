@@ -45,10 +45,18 @@
 
         <div class="flex-1 overflow-hidden rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
             @if ($activeTab === 'geral')
-                <div class="space-y-6">
-                    <div>
-                        <h2 class="text-lg font-semibold text-slate-900">Dados gerais</h2>
-                        <p class="text-sm text-slate-500">Informações principais do cliente.</p>
+                <div x-data="{ openOpcionais: false }" class="space-y-6">
+                    <div class="flex items-start justify-between gap-3">
+                        <div>
+                            <h2 class="text-lg font-semibold text-slate-900">Dados gerais</h2>
+                            <p class="text-sm text-slate-500">Informações principais do cliente.</p>
+                        </div>
+                        @can('clients.edit')
+                            <button type="button" @click="openOpcionais = true"
+                                    class="inline-flex items-center gap-1 rounded-lg border border-blue-300 bg-blue-50 px-3 py-1.5 text-sm font-medium text-blue-700 hover:bg-blue-100">
+                                ➕ Opcionais
+                            </button>
+                        @endcan
                     </div>
 
                     <div class="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
@@ -109,20 +117,6 @@
                                 </div>
                             </div>
                         @endforeach
-
-                        <div class="md:col-span-2">
-                            <label class="mb-1 block text-sm font-medium text-slate-700">Observação 1</label>
-                            <div class="min-h-[110px] rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-800">
-                                {{ $client->obs ?: '-' }}
-                            </div>
-                        </div>
-
-                        <div class="md:col-span-2">
-                            <label class="mb-1 block text-sm font-medium text-slate-700">Observação 2</label>
-                            <div class="min-h-[110px] rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-800">
-                                {{ $client->obs_2 ?: '-' }}
-                            </div>
-                        </div>
                     </div>
 
                     {{-- Histórico ABAC --}}
@@ -246,6 +240,97 @@
                             </div>
                         @endcan
                     </div>
+
+                    {{-- Modal: Opcionais (datas, motivos, observações) --}}
+                    @can('clients.edit')
+                        <div x-show="openOpcionais" x-cloak class="fixed inset-0 z-[9999] overflow-y-auto bg-black/50">
+                            <div class="flex min-h-full items-center justify-center p-4">
+                                <div @click.away="openOpcionais = false" class="relative my-8 w-full max-w-3xl rounded-2xl bg-white shadow-2xl max-h-[90vh] overflow-y-auto">
+                                    <form method="POST" action="{{ route('clients.update', $client) }}">
+                                        @csrf @method('PUT')
+                                        <div class="border-b border-slate-200 px-6 py-4">
+                                            <h3 class="text-lg font-semibold text-slate-900">Opcionais</h3>
+                                            <p class="text-xs text-slate-500">Filiações, datas da empresa e observações. Para outros números/datas anteriores, use o botão "+ Adicionar filiação anterior" abaixo.</p>
+                                        </div>
+
+                                        <div class="space-y-5 p-6">
+                                            {{-- ABAC --}}
+                                            <div class="rounded-xl border border-slate-200 p-4">
+                                                <h4 class="mb-3 text-sm font-semibold text-slate-700">Filiação ABAC</h4>
+                                                <div class="grid grid-cols-1 gap-4 md:grid-cols-2">
+                                                    <div>
+                                                        <label class="mb-1 block text-xs font-medium text-slate-600">Nº filiação</label>
+                                                        <input type="text" name="num_filiacao_abac" value="{{ $client->num_filiacao_abac }}" class="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm">
+                                                    </div>
+                                                    <div>
+                                                        <label class="mb-1 block text-xs font-medium text-slate-600">Data de filiação</label>
+                                                        <input type="date" name="dt_filiacao_abac" value="{{ $client->dt_filiacao_abac?->format('Y-m-d') }}" class="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm">
+                                                    </div>
+                                                    <div>
+                                                        <label class="mb-1 block text-xs font-medium text-slate-600">Data de desfiliação</label>
+                                                        <input type="date" name="dt_desfiliacao_abac" value="{{ $client->dt_desfiliacao_abac?->format('Y-m-d') }}" class="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm">
+                                                    </div>
+                                                    <div>
+                                                        <label class="mb-1 block text-xs font-medium text-slate-600">Motivo da desfiliação</label>
+                                                        <input type="text" name="motivo_desfiliacao_abac" value="{{ $client->motivo_desfiliacao_abac }}" class="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm">
+                                                    </div>
+                                                </div>
+                                            </div>
+
+                                            {{-- SINAC --}}
+                                            <div class="rounded-xl border border-slate-200 p-4">
+                                                <h4 class="mb-3 text-sm font-semibold text-slate-700">Filiação SINAC</h4>
+                                                <div class="grid grid-cols-1 gap-4 md:grid-cols-2">
+                                                    <div>
+                                                        <label class="mb-1 block text-xs font-medium text-slate-600">Nº filiação</label>
+                                                        <input type="text" name="num_filiacao_sinac" value="{{ $client->num_filiacao_sinac }}" class="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm">
+                                                    </div>
+                                                    <div>
+                                                        <label class="mb-1 block text-xs font-medium text-slate-600">Data de filiação</label>
+                                                        <input type="date" name="dt_filiacao_sinac" value="{{ $client->dt_filiacao_sinac?->format('Y-m-d') }}" class="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm">
+                                                    </div>
+                                                    <div>
+                                                        <label class="mb-1 block text-xs font-medium text-slate-600">Data de desfiliação</label>
+                                                        <input type="date" name="dt_desfiliacao_sinac" value="{{ $client->dt_desfiliacao_sinac?->format('Y-m-d') }}" class="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm">
+                                                    </div>
+                                                    <div>
+                                                        <label class="mb-1 block text-xs font-medium text-slate-600">Motivo da desfiliação</label>
+                                                        <input type="text" name="motivo_desfiliacao_sinac" value="{{ $client->motivo_desfiliacao_sinac }}" class="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm">
+                                                    </div>
+                                                </div>
+                                            </div>
+
+                                            {{-- Datas da empresa --}}
+                                            <div class="rounded-xl border border-slate-200 p-4">
+                                                <h4 class="mb-3 text-sm font-semibold text-slate-700">Datas da empresa</h4>
+                                                <div class="grid grid-cols-1 gap-4 md:grid-cols-2">
+                                                    <div>
+                                                        <label class="mb-1 block text-xs font-medium text-slate-600">Data de abertura</label>
+                                                        <input type="date" name="dt_abertura_empresa" value="{{ $client->dt_abertura_empresa?->format('Y-m-d') }}" class="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm">
+                                                    </div>
+                                                    <div>
+                                                        <label class="mb-1 block text-xs font-medium text-slate-600">Data de comemoração de aniversário</label>
+                                                        <input type="date" name="dt_aniversario_empresa" value="{{ $client->dt_aniversario_empresa?->format('Y-m-d') }}" class="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm">
+                                                    </div>
+                                                </div>
+                                            </div>
+
+                                            {{-- Observações --}}
+                                            <div class="rounded-xl border border-slate-200 p-4">
+                                                <label class="mb-1 block text-sm font-semibold text-slate-700">Observações</label>
+                                                <textarea name="obs" rows="4" class="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm">{{ $client->obs }}</textarea>
+                                            </div>
+                                        </div>
+
+                                        <div class="sticky bottom-0 flex justify-end gap-3 border-t border-slate-200 bg-white px-6 py-4">
+                                            <button type="button" @click="openOpcionais = false" class="rounded-xl border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700">Cancelar</button>
+                                            <button type="submit" class="rounded-xl bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700">Salvar</button>
+                                        </div>
+                                    </form>
+                                </div>
+                            </div>
+                        </div>
+                    @endcan
                 </div>
             @endif
 
@@ -552,12 +637,7 @@
                                                     <div class="text-xs text-slate-500">{{ $contact->telefone_2 }}</div>
                                                 @endif
                                             </td>
-                                            <td class="px-4 py-3 text-sm text-slate-700">
-                                                {{ $contact->departamento ?: '-' }}
-                                                @if($contact->outro_departamento)
-                                                    <div class="text-xs text-slate-500">{{ $contact->outro_departamento }}</div>
-                                                @endif
-                                            </td>
+                                            <td class="px-4 py-3 text-sm text-slate-700">{{ $contact->departamento ?: '-' }}</td>
                                             <td class="px-4 py-3 text-sm text-slate-700">
                                                 <div class="flex flex-wrap gap-1">
                                                     @if($contact->representante_legal)
@@ -652,13 +732,9 @@
                                                 <label class="mb-1 block text-sm font-medium text-slate-700">Telefone 2</label>
                                                 <input type="text" name="telefone_2" class="w-full rounded-xl border border-slate-300 px-4 py-2.5 text-sm">
                                             </div>
-                                            <div>
+                                            <div class="md:col-span-2">
                                                 <label class="mb-1 block text-sm font-medium text-slate-700">Departamento</label>
                                                 <input type="text" name="departamento" class="w-full rounded-xl border border-slate-300 px-4 py-2.5 text-sm">
-                                            </div>
-                                            <div>
-                                                <label class="mb-1 block text-sm font-medium text-slate-700">Outro Departamento</label>
-                                                <input type="text" name="outro_departamento" class="w-full rounded-xl border border-slate-300 px-4 py-2.5 text-sm">
                                             </div>
                                             <div class="xl:col-span-4">
                                                 <label class="mb-1 block text-sm font-medium text-slate-700">Observação</label>
@@ -742,13 +818,9 @@
                                                     <label class="mb-1 block text-sm font-medium text-slate-700">Telefone 2</label>
                                                     <input type="text" name="telefone_2" value="{{ $contact->telefone_2 }}" class="w-full rounded-xl border border-slate-300 px-4 py-2.5 text-sm">
                                                 </div>
-                                                <div>
+                                                <div class="md:col-span-2">
                                                     <label class="mb-1 block text-sm font-medium text-slate-700">Departamento</label>
                                                     <input type="text" name="departamento" value="{{ $contact->departamento }}" class="w-full rounded-xl border border-slate-300 px-4 py-2.5 text-sm">
-                                                </div>
-                                                <div>
-                                                    <label class="mb-1 block text-sm font-medium text-slate-700">Outro Departamento</label>
-                                                    <input type="text" name="outro_departamento" value="{{ $contact->outro_departamento }}" class="w-full rounded-xl border border-slate-300 px-4 py-2.5 text-sm">
                                                 </div>
                                                 <div class="xl:col-span-4">
                                                     <label class="mb-1 block text-sm font-medium text-slate-700">Observação</label>

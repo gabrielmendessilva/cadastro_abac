@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Client;
 use App\Models\ClientComite;
+use App\Models\Lista\Comite;
 use App\Models\Lista\Departamento;
 use App\Models\Lista\Estado;
 use App\Models\Lista\Funcao;
@@ -19,6 +20,7 @@ class ListaController extends Controller
         'regionais' => ['model' => Regional::class, 'label' => 'Regionais', 'campos' => ['nome', 'descricao']],
         'segmentos' => ['model' => Segmento::class, 'label' => 'Segmentos', 'campos' => ['nome', 'descricao']],
         'departamentos' => ['model' => Departamento::class, 'label' => 'Departamentos', 'campos' => ['nome', 'descricao']],
+        'comites' => ['model' => Comite::class, 'label' => 'Comitês', 'campos' => ['nome', 'descricao']],
         'funcoes' => ['model' => Funcao::class, 'label' => 'Funções', 'campos' => ['nome', 'descricao']],
         'status' => ['model' => StatusOption::class, 'label' => 'Status', 'campos' => ['nome', 'descricao']],
         'estados' => ['model' => Estado::class, 'label' => 'Estados', 'campos' => ['uf', 'nome']],
@@ -31,14 +33,14 @@ class ListaController extends Controller
 
         $aba = $request->get('aba', 'mandatos');
 
-        $abasPainel = ['mandatos', 'comites'];
+        $abasPainel = ['mandatos', 'integrantes_comites'];
 
         if (in_array($aba, $abasPainel, true)) {
             return view('listas.index', [
                 'aba' => $aba,
                 'recursos' => self::RECURSOS,
                 'mandatos' => $aba === 'mandatos' ? $this->mandatosProximos() : collect(),
-                'integrantesComites' => $aba === 'comites' ? $this->integrantesComites() : collect(),
+                'integrantesComites' => $aba === 'integrantes_comites' ? $this->integrantesComites() : collect(),
                 'itensRecurso' => collect(),
                 'recursoAtual' => null,
             ]);

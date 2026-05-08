@@ -24,8 +24,8 @@ class ClientEndereco extends Model
 
     public const TIPOS = [
         'principal' => 'Principal',
-        'secundario' => 'Secundário',
-        'outro' => 'Outro',
+        'pagamento' => 'Pagamento',
+        'entrega' => 'Entrega',
     ];
 
     public function client()

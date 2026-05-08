@@ -1,62 +1,8 @@
 {{-- Aba JURÍDICO --}}
-<div x-data="{ openSocio: false, openContato: false, areaContato: 'juridico' }" class="space-y-6">
+<div x-data="{ openContato: false, areaContato: 'juridico' }" class="space-y-6">
     <div>
         <h2 class="text-lg font-semibold text-slate-900">Jurídico</h2>
-        <p class="text-sm text-slate-500">Sociedade, sócios, administradores e contatos de interesse.</p>
-    </div>
-
-    {{-- Sociedade / sócios / administradores --}}
-    <div class="rounded-2xl border border-slate-200 bg-white p-5">
-        <div class="mb-4 flex items-center justify-between">
-            <div>
-                <h3 class="text-sm font-semibold text-slate-700">Sociedade</h3>
-                <p class="text-xs text-slate-500">Sócios e administradores da empresa.</p>
-            </div>
-            @can('clients.edit')
-                <button @click="openSocio = true"
-                        class="rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-700">
-                    + Adicionar
-                </button>
-            @endcan
-        </div>
-
-        @if ($client->socios->isEmpty())
-            <p class="rounded-lg border border-dashed border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-500">Nenhum sócio/administrador cadastrado.</p>
-        @else
-            <div class="overflow-hidden rounded-xl border border-slate-200">
-                <table class="min-w-full divide-y divide-slate-200 text-sm">
-                    <thead class="bg-slate-50 text-xs">
-                        <tr>
-                            <th class="px-3 py-2 text-left font-semibold text-slate-500">Papel</th>
-                            <th class="px-3 py-2 text-left font-semibold text-slate-500">Nome</th>
-                            <th class="px-3 py-2 text-left font-semibold text-slate-500">CPF/CNPJ</th>
-                            @can('clients.edit')<th></th>@endcan
-                        </tr>
-                    </thead>
-                    <tbody class="divide-y divide-slate-100">
-                        @foreach ($client->socios as $s)
-                            <tr>
-                                <td class="px-3 py-2">
-                                    <span class="rounded-full {{ $s->papel === 'administrador' ? 'bg-purple-100 text-purple-700' : 'bg-blue-100 text-blue-700' }} px-2 py-0.5 text-xs">
-                                        {{ \App\Models\ClientSocio::PAPEIS[$s->papel] }}
-                                    </span>
-                                </td>
-                                <td class="px-3 py-2">{{ $s->nome }}</td>
-                                <td class="px-3 py-2">{{ $s->cpf_cnpj ?: '-' }}</td>
-                                @can('clients.edit')
-                                    <td class="px-3 py-2 text-right">
-                                        <form method="POST" action="{{ route('clients.socios.destroy', [$client, $s]) }}" class="inline">
-                                            @csrf @method('DELETE')
-                                            <button onclick="return confirm('Remover?')" class="rounded-lg border border-red-200 px-2 py-1 text-xs text-red-600 hover:bg-red-50">Remover</button>
-                                        </form>
-                                    </td>
-                                @endcan
-                            </tr>
-                        @endforeach
-                    </tbody>
-                </table>
-            </div>
-        @endif
+        <p class="text-sm text-slate-500">Contatos de interesse jurídico e SINAC. Sócios/administradores agora ficam em <a href="{{ route('clients.show', ['client' => $client, 'tab' => 'cadastro', 'subtab' => 'sociedade']) }}" class="text-blue-600 hover:underline">Cadastro → Sócio / Administrador</a>.</p>
     </div>
 
     {{-- Contatos JURÍDICO e SINAC --}}
@@ -135,46 +81,7 @@
         @endcan
     </form>
 
-    {{-- Modal: novo sócio --}}
     @can('clients.edit')
-        <div x-show="openSocio" x-cloak class="fixed inset-0 z-[9999] overflow-y-auto bg-black/50">
-            <div class="flex min-h-full items-center justify-center p-4">
-                <div @click.away="openSocio = false" class="w-full max-w-2xl rounded-2xl bg-white shadow-2xl">
-                    <form method="POST" action="{{ route('clients.socios.store', $client) }}">
-                        @csrf
-                        <div class="border-b border-slate-200 px-6 py-4">
-                            <h3 class="text-lg font-semibold text-slate-900">Novo sócio / administrador</h3>
-                        </div>
-                        <div class="grid grid-cols-1 gap-4 p-6 md:grid-cols-2">
-                            <div>
-                                <label class="mb-1 block text-sm font-medium text-slate-700">Papel</label>
-                                <select name="papel" class="w-full rounded-xl border border-slate-300 px-4 py-2.5 text-sm">
-                                    <option value="socio">Sócio</option>
-                                    <option value="administrador">Administrador</option>
-                                </select>
-                            </div>
-                            <div>
-                                <label class="mb-1 block text-sm font-medium text-slate-700">CPF/CNPJ</label>
-                                <input type="text" name="cpf_cnpj" class="w-full rounded-xl border border-slate-300 px-4 py-2.5 text-sm">
-                            </div>
-                            <div class="md:col-span-2">
-                                <label class="mb-1 block text-sm font-medium text-slate-700">Nome *</label>
-                                <input type="text" name="nome" required class="w-full rounded-xl border border-slate-300 px-4 py-2.5 text-sm">
-                            </div>
-                            <div class="md:col-span-2">
-                                <label class="mb-1 block text-sm font-medium text-slate-700">Observações</label>
-                                <textarea name="observacoes" rows="2" class="w-full rounded-xl border border-slate-300 px-4 py-2.5 text-sm"></textarea>
-                            </div>
-                        </div>
-                        <div class="flex justify-end gap-3 border-t border-slate-200 px-6 py-4">
-                            <button type="button" @click="openSocio = false" class="rounded-xl border border-slate-300 px-4 py-2 text-sm">Cancelar</button>
-                            <button class="rounded-xl bg-blue-600 px-4 py-2 text-sm text-white hover:bg-blue-700">Salvar</button>
-                        </div>
-                    </form>
-                </div>
-            </div>
-        </div>
-
         {{-- Modal: novo contato (jurídico/SINAC) --}}
         <div x-show="openContato" x-cloak class="fixed inset-0 z-[9999] overflow-y-auto bg-black/50">
             <div class="flex min-h-full items-center justify-center p-4">
