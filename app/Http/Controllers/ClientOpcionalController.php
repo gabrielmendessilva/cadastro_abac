@@ -10,6 +10,8 @@ class ClientOpcionalController extends Controller
 {
     public function store(Request $request, Client $client)
     {
+        abort_unless(auth()->user()->can('clients.edit'), 403);
+
         $data = $request->validate([
             'site' => ['nullable', 'string', 'max:255'],
             'inicio_atv' => ['nullable', 'date'],
@@ -30,6 +32,7 @@ class ClientOpcionalController extends Controller
 
     public function update(Request $request, Client $client, ClientOpcional $opcional)
     {
+        abort_unless(auth()->user()->can('clients.edit'), 403);
         abort_if($opcional->client_id !== $client->id, 404);
 
         $data = $request->validate([
@@ -50,6 +53,7 @@ class ClientOpcionalController extends Controller
 
     public function destroy(Client $client, ClientOpcional $opcional)
     {
+        abort_unless(auth()->user()->can('clients.edit'), 403);
         abort_if($opcional->client_id !== $client->id, 404);
 
         $opcional->delete();

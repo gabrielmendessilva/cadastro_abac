@@ -29,6 +29,12 @@
                 @can('users.view')
                     <a href="{{ route('users.index') }}" class="block rounded-xl px-4 py-3 hover:bg-slate-800 {{ request()->routeIs('users.*') ? 'bg-slate-800' : '' }}">Usuários</a>
                 @endcan
+                @if (auth()->user()?->isRoot())
+                    <a href="{{ route('roles.index') }}"
+                       class="block rounded-xl px-4 py-3 hover:bg-slate-800 {{ request()->routeIs('roles.*') ? 'bg-slate-800' : '' }}">
+                        🔒 Perfis &amp; Permissões
+                    </a>
+                @endif
             </nav>
         </aside>
 

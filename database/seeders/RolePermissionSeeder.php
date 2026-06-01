@@ -20,10 +20,13 @@ class RolePermissionSeeder extends Seeder
             Permission::firstOrCreate(['name' => $permission, 'guard_name' => 'web']);
         }
 
+        $root = Role::firstOrCreate(['name' => 'Root', 'guard_name' => 'web']);
         $admin = Role::firstOrCreate(['name' => 'Administrador', 'guard_name' => 'web']);
         $operator = Role::firstOrCreate(['name' => 'Operador', 'guard_name' => 'web']);
         $viewer = Role::firstOrCreate(['name' => 'Consulta', 'guard_name' => 'web']);
 
+        // Root recebe todas as permissões (também passa por Gate::before).
+        $root->syncPermissions($permissions);
         $admin->syncPermissions($permissions);
         $operator->syncPermissions([
             'clients.view', 'clients.create', 'clients.edit',

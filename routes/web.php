@@ -18,6 +18,8 @@ use App\Http\Controllers\ClientJuridicoContatoController;
 use App\Http\Controllers\ClientComiteController;
 use App\Http\Controllers\ClientTagController;
 use App\Http\Controllers\ListaController;
+use App\Http\Controllers\CepController;
+use App\Http\Controllers\RoleController;
 
 
 Route::redirect('/', '/login');
@@ -32,8 +34,24 @@ Route::middleware('auth')->group(function () {
 
     Route::get('/dashboard', DashboardController::class)->name('dashboard');
 
+    // Consulta CEP (ViaCEP + OpenCEP fallback)
+    Route::get('/api/cep/{cep}', [CepController::class, 'show'])->name('cep.show')->where('cep', '[0-9\-]+');
+
     Route::resource('users', UserController::class);
     Route::resource('clients', ClientController::class);
+
+    // Perfis e permissões — somente Root
+    Route::middleware('root')->group(function () {
+        Route::get('/roles', [RoleController::class, 'index'])->name('roles.index');
+        Route::post('/roles', [RoleController::class, 'store'])->name('roles.store');
+        Route::post('/roles/sync', [RoleController::class, 'sync'])->name('roles.sync');
+        Route::delete('/roles/{role}', [RoleController::class, 'destroy'])->name('roles.destroy');
+
+        // Permissões individuais por usuário
+        Route::get('/users/{user}/permissions', [UserController::class, 'permissions'])->name('users.permissions.edit');
+        Route::put('/users/{user}/permissions', [UserController::class, 'syncPermissions'])->name('users.permissions.update');
+        Route::put('/users/{user}/role', [UserController::class, 'changeRole'])->name('users.role.update');
+    });
 
     Route::resource('documents', DocumentController::class);
     Route::get('/documents/{document}/download', [DocumentController::class, 'download'])->name('documents.download');
@@ -93,5 +111,6 @@ Route::middleware('auth')->group(function () {
     // Listas (tabelas de domínio + relatórios)
     Route::get('/listas', [ListaController::class, 'index'])->name('listas.index');
     Route::post('/listas/{aba}', [ListaController::class, 'store'])->name('listas.store');
+    Route::put('/listas/{aba}/{id}', [ListaController::class, 'update'])->name('listas.update');
     Route::delete('/listas/{aba}/{id}', [ListaController::class, 'destroy'])->name('listas.destroy');
 });

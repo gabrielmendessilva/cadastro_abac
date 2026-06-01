@@ -14,7 +14,7 @@ class DatabaseSeeder extends Seeder
         $this->call(ListasDominioSeeder::class);
         $this->call(ComitesSeeder::class);
 
-        $admin = User::firstOrCreate(
+        $root = User::firstOrCreate(
             ['email' => 'admin@sistema.local'],
             [
                 'name' => 'Administrador',
@@ -23,6 +23,6 @@ class DatabaseSeeder extends Seeder
             ]
         );
 
-        $admin->syncRoles(['Administrador']);
+        $root->syncRoles(['Root']);
     }
 }

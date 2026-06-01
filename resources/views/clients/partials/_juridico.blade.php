@@ -1,5 +1,5 @@
 {{-- Aba JURÍDICO --}}
-<div x-data="{ openContato: false, areaContato: 'juridico' }" class="space-y-6">
+<div x-data="{ openContato: false, areaContato: 'juridico', editOpen: null }" class="space-y-6">
     <div>
         <h2 class="text-lg font-semibold text-slate-900">Jurídico</h2>
         <p class="text-sm text-slate-500">Contatos de interesse jurídico e SINAC. Sócios/administradores agora ficam em <a href="{{ route('clients.show', ['client' => $client, 'tab' => 'cadastro', 'subtab' => 'sociedade']) }}" class="text-blue-600 hover:underline">Cadastro → Sócio / Administrador</a>.</p>
@@ -46,10 +46,16 @@
                                     <td class="px-3 py-2">{{ $c->telefone ?: '-' }}</td>
                                     @can('clients.edit')
                                         <td class="px-3 py-2 text-right">
-                                            <form method="POST" action="{{ route('clients.juridico.destroy', [$client, $c]) }}" class="inline">
-                                                @csrf @method('DELETE')
-                                                <button onclick="return confirm('Remover?')" class="rounded-lg border border-red-200 px-2 py-1 text-xs text-red-600 hover:bg-red-50">Remover</button>
-                                            </form>
+                                            <div class="inline-flex gap-1">
+                                                <button type="button" @click="editOpen = {{ $c->id }}"
+                                                        class="rounded-lg border border-amber-300 px-2 py-1 text-xs font-medium text-amber-700 hover:bg-amber-50">
+                                                    Editar
+                                                </button>
+                                                <form method="POST" action="{{ route('clients.juridico.destroy', [$client, $c]) }}" class="inline">
+                                                    @csrf @method('DELETE')
+                                                    <button onclick="return confirm('Remover?')" class="rounded-lg border border-red-200 px-2 py-1 text-xs text-red-600 hover:bg-red-50">Remover</button>
+                                                </form>
+                                            </div>
                                         </td>
                                     @endcan
                                 </tr>
@@ -122,5 +128,48 @@
                 </div>
             </div>
         </div>
+
+        {{-- Modais de edição --}}
+        @foreach ($client->juridicoContatos as $c)
+            <div x-show="editOpen === {{ $c->id }}" x-cloak class="fixed inset-0 z-[9999] overflow-y-auto bg-black/50">
+                <div class="flex min-h-full items-center justify-center p-4">
+                    <div @click.away="editOpen = null" class="w-full max-w-2xl rounded-2xl bg-white shadow-2xl">
+                        <form method="POST" action="{{ route('clients.juridico.update', [$client, $c]) }}">
+                            @csrf @method('PUT')
+                            <input type="hidden" name="area" value="{{ $c->area }}">
+                            <div class="border-b border-slate-200 px-6 py-4">
+                                <h3 class="text-lg font-semibold text-slate-900">Editar contato — {{ ucfirst($c->area) }}</h3>
+                            </div>
+                            <div class="grid grid-cols-1 gap-4 p-6 md:grid-cols-2">
+                                <div class="md:col-span-2">
+                                    <label class="mb-1 block text-sm font-medium text-slate-700">Nome *</label>
+                                    <input type="text" name="nome" value="{{ $c->nome }}" required class="w-full rounded-xl border border-slate-300 px-4 py-2.5 text-sm">
+                                </div>
+                                <div>
+                                    <label class="mb-1 block text-sm font-medium text-slate-700">Função</label>
+                                    <input type="text" name="funcao" value="{{ $c->funcao }}" class="w-full rounded-xl border border-slate-300 px-4 py-2.5 text-sm">
+                                </div>
+                                <div>
+                                    <label class="mb-1 block text-sm font-medium text-slate-700">Departamento</label>
+                                    <input type="text" name="departamento" value="{{ $c->departamento }}" class="w-full rounded-xl border border-slate-300 px-4 py-2.5 text-sm">
+                                </div>
+                                <div>
+                                    <label class="mb-1 block text-sm font-medium text-slate-700">E-mail</label>
+                                    <input type="email" name="email" value="{{ $c->email }}" class="w-full rounded-xl border border-slate-300 px-4 py-2.5 text-sm">
+                                </div>
+                                <div>
+                                    <label class="mb-1 block text-sm font-medium text-slate-700">Telefone</label>
+                                    <input type="text" name="telefone" value="{{ $c->telefone }}" class="w-full rounded-xl border border-slate-300 px-4 py-2.5 text-sm">
+                                </div>
+                            </div>
+                            <div class="flex justify-end gap-3 border-t border-slate-200 px-6 py-4">
+                                <button type="button" @click="editOpen = null" class="rounded-xl border border-slate-300 px-4 py-2 text-sm">Cancelar</button>
+                                <button class="rounded-xl bg-blue-600 px-4 py-2 text-sm text-white hover:bg-blue-700">Atualizar</button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        @endforeach
     @endcan
 </div>

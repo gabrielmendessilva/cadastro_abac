@@ -14,7 +14,7 @@
 
     <form method="GET" class="mb-6">
         <div class="flex gap-3">
-            <input type="text" name="search" value="{ request('search') }" class="w-full rounded-2xl border border-slate-300 px-4 py-3" placeholder="Buscar...">
+            <input type="text" name="search" value="{{ request('search') }}" class="w-full rounded-2xl border border-slate-300 px-4 py-3" placeholder="Buscar...">
             <button class="rounded-2xl bg-slate-900 px-5 py-3 text-white">Buscar</button>
         </div>
     </form>
@@ -40,6 +40,10 @@
                         <td class="py-4 pr-4 flex gap-2 flex-wrap">
                             <a href="{{ route('users.show', $user) }}" class="rounded-xl border px-3 py-2">Ver</a>
                             @can('users.edit')<a href="{{ route('users.edit', $user) }}" class="rounded-xl border px-3 py-2">Editar</a>@endcan
+                            @if (auth()->user()->isRoot())
+                                <a href="{{ route('users.permissions.edit', $user) }}"
+                                   class="rounded-xl border border-blue-200 bg-blue-50 px-3 py-2 text-blue-700">🔑 Permissões</a>
+                            @endif
                             @can('users.delete')
                             <form method="POST" action="{{ route('users.destroy', $user) }}" onsubmit="return confirm('Excluir usuário?')">
                                 @csrf @method('DELETE')

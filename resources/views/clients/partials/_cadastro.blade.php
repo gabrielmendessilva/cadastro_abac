@@ -68,7 +68,7 @@
     @endif
 
     @if ($subtab === 'comites')
-        <div x-data="{ openComite: false }" class="rounded-2xl border border-slate-200 bg-white p-5">
+        <div x-data="{ openComite: false, editOpen: null }" class="rounded-2xl border border-slate-200 bg-white p-5">
             <div class="mb-3 flex items-center justify-between">
                 <div>
                     <h3 class="text-sm font-semibold text-slate-700">Comitês</h3>
@@ -107,10 +107,16 @@
                                     <td class="px-3 py-2">{{ $cm->contato?->nome ?: '-' }}</td>
                                     @can('clients.edit')
                                         <td class="px-3 py-2 text-right">
-                                            <form method="POST" action="{{ route('clients.comites.destroy', [$client, $cm]) }}" class="inline">
-                                                @csrf @method('DELETE')
-                                                <button onclick="return confirm('Remover?')" class="rounded-lg border border-red-200 px-2 py-1 text-xs text-red-600 hover:bg-red-50">Remover</button>
-                                            </form>
+                                            <div class="inline-flex gap-1">
+                                                <button type="button" @click="editOpen = {{ $cm->id }}"
+                                                        class="rounded-lg border border-amber-300 px-2 py-1 text-xs font-medium text-amber-700 hover:bg-amber-50">
+                                                    Editar
+                                                </button>
+                                                <form method="POST" action="{{ route('clients.comites.destroy', [$client, $cm]) }}" class="inline">
+                                                    @csrf @method('DELETE')
+                                                    <button onclick="return confirm('Remover?')" class="rounded-lg border border-red-200 px-2 py-1 text-xs text-red-600 hover:bg-red-50">Remover</button>
+                                                </form>
+                                            </div>
                                         </td>
                                     @endcan
                                 </tr>
@@ -173,6 +179,61 @@
                         </div>
                     </div>
                 </div>
+
+                {{-- Modais de edição --}}
+                @foreach ($client->comites as $cm)
+                    <div x-show="editOpen === {{ $cm->id }}" x-cloak class="fixed inset-0 z-[9999] overflow-y-auto bg-black/50">
+                        <div class="flex min-h-full items-center justify-center p-4">
+                            <div @click.away="editOpen = null" class="w-full max-w-2xl rounded-2xl bg-white shadow-2xl">
+                                <form method="POST" action="{{ route('clients.comites.update', [$client, $cm]) }}">
+                                    @csrf @method('PUT')
+                                    <div class="border-b border-slate-200 px-6 py-4">
+                                        <h3 class="text-lg font-semibold text-slate-900">Editar comitê</h3>
+                                    </div>
+                                    <div class="grid grid-cols-1 gap-4 p-6 md:grid-cols-2">
+                                        <div class="md:col-span-2">
+                                            <label class="mb-1 block text-sm font-medium text-slate-700">Comitê *</label>
+                                            @if ($comitesMaster->isEmpty())
+                                                <input type="text" name="comite_nome" value="{{ $cm->comite_nome }}" required class="w-full rounded-xl border border-slate-300 px-4 py-2.5 text-sm">
+                                            @else
+                                                <select name="comite_nome" required class="w-full rounded-xl border border-slate-300 px-4 py-2.5 text-sm">
+                                                    @foreach ($comitesMaster as $masterCm)
+                                                        <option value="{{ $masterCm->nome }}" {{ $cm->comite_nome === $masterCm->nome ? 'selected' : '' }}>{{ $masterCm->nome }}</option>
+                                                    @endforeach
+                                                </select>
+                                            @endif
+                                        </div>
+                                        <div>
+                                            <label class="mb-1 block text-sm font-medium text-slate-700">Papel</label>
+                                            <select name="papel" class="w-full rounded-xl border border-slate-300 px-4 py-2.5 text-sm">
+                                                @foreach (\App\Models\ClientComite::PAPEIS as $key => $label)
+                                                    <option value="{{ $key }}" {{ $cm->papel === $key ? 'selected' : '' }}>{{ $label }}</option>
+                                                @endforeach
+                                            </select>
+                                        </div>
+                                        <div>
+                                            <label class="mb-1 block text-sm font-medium text-slate-700">Contato vinculado</label>
+                                            <select name="contato_id" class="w-full rounded-xl border border-slate-300 px-4 py-2.5 text-sm">
+                                                <option value="">— nenhum —</option>
+                                                @foreach ($client->contatos as $ct)
+                                                    <option value="{{ $ct->id }}" {{ $cm->contato_id === $ct->id ? 'selected' : '' }}>{{ $ct->nome }}</option>
+                                                @endforeach
+                                            </select>
+                                        </div>
+                                        <div class="md:col-span-2">
+                                            <label class="mb-1 block text-sm font-medium text-slate-700">Observações</label>
+                                            <textarea name="observacoes" rows="2" class="w-full rounded-xl border border-slate-300 px-4 py-2.5 text-sm">{{ $cm->observacoes }}</textarea>
+                                        </div>
+                                    </div>
+                                    <div class="flex justify-end gap-3 border-t border-slate-200 px-6 py-4">
+                                        <button type="button" @click="editOpen = null" class="rounded-xl border border-slate-300 px-4 py-2 text-sm">Cancelar</button>
+                                        <button class="rounded-xl bg-blue-600 px-4 py-2 text-sm text-white hover:bg-blue-700">Atualizar</button>
+                                    </div>
+                                </form>
+                            </div>
+                        </div>
+                    </div>
+                @endforeach
             @endcan
         </div>
     @endif

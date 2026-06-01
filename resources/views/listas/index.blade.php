@@ -121,7 +121,7 @@
 
             {{-- Tabelas de domínio --}}
             @if ($recursoAtual)
-                <div x-data="{ openNew: false }" class="rounded-2xl border border-slate-200 bg-white p-5">
+                <div x-data="{ openNew: false, editOpen: null }" class="rounded-2xl border border-slate-200 bg-white p-5">
                     <div class="mb-3 flex items-center justify-between">
                         <h2 class="text-lg font-semibold text-slate-900">{{ $recursoAtual['label'] }}</h2>
                         @can('clients.edit')
@@ -153,11 +153,15 @@
                                             @endforeach
                                             @can('clients.edit')
                                                 <td class="px-3 py-2 text-right">
-                                                    <form method="POST" action="{{ route('listas.destroy', ['aba' => $aba, 'id' => $item->id]) }}" class="inline">
-                                                        @csrf @method('DELETE')
-                                                        <button onclick="return confirm('Remover?')"
-                                                                class="rounded-lg border border-red-200 px-2 py-1 text-xs text-red-600 hover:bg-red-50">Remover</button>
-                                                    </form>
+                                                    <div class="inline-flex gap-1">
+                                                        <button type="button" @click="editOpen = {{ $item->id }}"
+                                                                class="rounded-lg border border-amber-300 px-2 py-1 text-xs font-medium text-amber-700 hover:bg-amber-50">Editar</button>
+                                                        <form method="POST" action="{{ route('listas.destroy', ['aba' => $aba, 'id' => $item->id]) }}" class="inline">
+                                                            @csrf @method('DELETE')
+                                                            <button onclick="return confirm('Remover?')"
+                                                                    class="rounded-lg border border-red-200 px-2 py-1 text-xs text-red-600 hover:bg-red-50">Remover</button>
+                                                        </form>
+                                                    </div>
                                                 </td>
                                             @endcan
                                         </tr>
@@ -194,6 +198,35 @@
                                 </div>
                             </div>
                         </div>
+
+                        {{-- Modais de edição --}}
+                        @foreach ($itensRecurso as $item)
+                            <div x-show="editOpen === {{ $item->id }}" x-cloak class="fixed inset-0 z-[9999] overflow-y-auto bg-black/50">
+                                <div class="flex min-h-full items-center justify-center p-4">
+                                    <div @click.away="editOpen = null" class="w-full max-w-lg rounded-2xl bg-white shadow-2xl">
+                                        <form method="POST" action="{{ route('listas.update', ['aba' => $aba, 'id' => $item->id]) }}">
+                                            @csrf @method('PUT')
+                                            <div class="border-b border-slate-200 px-6 py-4">
+                                                <h3 class="text-lg font-semibold text-slate-900">Editar · {{ $recursoAtual['label'] }}</h3>
+                                            </div>
+                                            <div class="grid grid-cols-1 gap-4 p-6">
+                                                @foreach ($recursoAtual['campos'] as $c)
+                                                    <div>
+                                                        <label class="mb-1 block text-sm font-medium uppercase text-slate-700">{{ $c }} {{ $loop->first ? '*' : '' }}</label>
+                                                        <input type="text" name="{{ $c }}" value="{{ $item->{$c} }}" {{ $loop->first ? 'required' : '' }}
+                                                               class="w-full rounded-xl border border-slate-300 px-4 py-2.5 text-sm">
+                                                    </div>
+                                                @endforeach
+                                            </div>
+                                            <div class="flex justify-end gap-3 border-t border-slate-200 px-6 py-4">
+                                                <button type="button" @click="editOpen = null" class="rounded-xl border border-slate-300 px-4 py-2 text-sm">Cancelar</button>
+                                                <button class="rounded-xl bg-blue-600 px-4 py-2 text-sm text-white hover:bg-blue-700">Atualizar</button>
+                                            </div>
+                                        </form>
+                                    </div>
+                                </div>
+                            </div>
+                        @endforeach
                     @endcan
                 </div>
             @endif

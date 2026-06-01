@@ -36,4 +36,12 @@ class User extends Authenticatable
     {
         return $this->hasMany(Document::class, 'uploaded_by');
     }
+
+    /**
+     * Usuário Root pode tudo (bypass via Gate::before no AppServiceProvider).
+     */
+    public function isRoot(): bool
+    {
+        return $this->hasRole('Root');
+    }
 }

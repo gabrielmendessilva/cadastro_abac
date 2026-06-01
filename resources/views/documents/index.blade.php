@@ -14,7 +14,7 @@
 
     <form method="GET" class="mb-6">
         <div class="flex gap-3">
-            <input type="text" name="search" value="{ request('search') }" class="w-full rounded-2xl border border-slate-300 px-4 py-3" placeholder="Buscar...">
+            <input type="text" name="search" value="{{ request('search') }}" class="w-full rounded-2xl border border-slate-300 px-4 py-3" placeholder="Buscar...">
             <button class="rounded-2xl bg-slate-900 px-5 py-3 text-white">Buscar</button>
         </div>
     </form>

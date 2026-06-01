@@ -10,6 +10,8 @@ class ClientContactController extends Controller
 {
     public function store(Request $request, Client $client)
     {
+        abort_unless(auth()->user()->can('clients.edit'), 403);
+
         $data = $request->validate([
             'nome' => ['required', 'string', 'max:255'],
             'funcao' => ['nullable', 'string', 'max:255'],
@@ -42,6 +44,7 @@ class ClientContactController extends Controller
 
     public function update(Request $request, Client $client, ClientContato $contact)
     {
+        abort_unless(auth()->user()->can('clients.edit'), 403);
         abort_if($contact->client_id !== $client->id, 404);
 
         $data = $request->validate([
@@ -74,6 +77,7 @@ class ClientContactController extends Controller
 
     public function destroy(Client $client, ClientContato $contact)
     {
+        abort_unless(auth()->user()->can('clients.edit'), 403);
         abort_if($contact->client_id !== $client->id, 404);
 
         $contact->delete();

@@ -1,5 +1,5 @@
 {{-- Histórico de filiações ABAC/SINAC anteriores --}}
-<div x-data="{ open: false, tipo: 'abac' }" class="space-y-2">
+<div x-data="{ open: false, tipo: 'abac', editOpen: null }" class="space-y-2">
     <div class="flex items-center justify-between">
         <h3 class="text-sm font-semibold text-slate-700">Filiações anteriores</h3>
         @can('clients.edit')
@@ -37,13 +37,19 @@
                             <td class="px-3 py-2">{{ $h->motivo_desfiliacao ?: '-' }}</td>
                             @can('clients.edit')
                                 <td class="px-3 py-2 text-right">
-                                    <form method="POST" action="{{ route('clients.filiacoes.destroy', [$client, $h]) }}" class="inline">
-                                        @csrf @method('DELETE')
-                                        <button onclick="return confirm('Remover esta filiação?')"
-                                                class="rounded-lg border border-red-200 px-2 py-0.5 text-[10px] font-medium text-red-600 hover:bg-red-50">
-                                            Remover
+                                    <div class="inline-flex gap-1">
+                                        <button type="button" @click="editOpen = {{ $h->id }}"
+                                                class="rounded-lg border border-amber-300 px-2 py-0.5 text-[10px] font-medium text-amber-700 hover:bg-amber-50">
+                                            Editar
                                         </button>
-                                    </form>
+                                        <form method="POST" action="{{ route('clients.filiacoes.destroy', [$client, $h]) }}" class="inline">
+                                            @csrf @method('DELETE')
+                                            <button onclick="return confirm('Remover esta filiação?')"
+                                                    class="rounded-lg border border-red-200 px-2 py-0.5 text-[10px] font-medium text-red-600 hover:bg-red-50">
+                                                Remover
+                                            </button>
+                                        </form>
+                                    </div>
                                 </td>
                             @endcan
                         </tr>
@@ -95,5 +101,48 @@
                 </div>
             </div>
         </div>
+
+        {{-- Modais de edição --}}
+        @foreach ($historico as $h)
+            <div x-show="editOpen === {{ $h->id }}" x-cloak class="fixed inset-0 z-[9999] overflow-y-auto bg-black/50">
+                <div class="flex min-h-full items-center justify-center p-4">
+                    <div @click.away="editOpen = null" class="w-full max-w-2xl rounded-2xl bg-white shadow-2xl">
+                        <form method="POST" action="{{ route('clients.filiacoes.update', [$client, $h]) }}">
+                            @csrf @method('PUT')
+                            <input type="hidden" name="tipo" value="{{ $h->tipo }}">
+                            <div class="border-b border-slate-200 px-6 py-4">
+                                <h3 class="text-lg font-semibold text-slate-900">Editar filiação — {{ strtoupper($h->tipo) }}</h3>
+                            </div>
+                            <div class="grid grid-cols-1 gap-4 p-6 md:grid-cols-2">
+                                <div>
+                                    <label class="mb-1 block text-sm font-medium text-slate-700">Número da filiação</label>
+                                    <input type="text" name="num_filiacao" value="{{ $h->num_filiacao }}" class="w-full rounded-xl border border-slate-300 px-4 py-2.5 text-sm">
+                                </div>
+                                <div>
+                                    <label class="mb-1 block text-sm font-medium text-slate-700">Data da filiação</label>
+                                    <input type="date" name="dt_filiacao" value="{{ $h->dt_filiacao?->format('Y-m-d') }}" class="w-full rounded-xl border border-slate-300 px-4 py-2.5 text-sm">
+                                </div>
+                                <div>
+                                    <label class="mb-1 block text-sm font-medium text-slate-700">Data da desfiliação</label>
+                                    <input type="date" name="dt_desfiliacao" value="{{ $h->dt_desfiliacao?->format('Y-m-d') }}" class="w-full rounded-xl border border-slate-300 px-4 py-2.5 text-sm">
+                                </div>
+                                <div>
+                                    <label class="mb-1 block text-sm font-medium text-slate-700">Motivo da desfiliação</label>
+                                    <input type="text" name="motivo_desfiliacao" value="{{ $h->motivo_desfiliacao }}" class="w-full rounded-xl border border-slate-300 px-4 py-2.5 text-sm">
+                                </div>
+                                <div class="md:col-span-2">
+                                    <label class="mb-1 block text-sm font-medium text-slate-700">Observações</label>
+                                    <textarea name="observacoes" rows="2" class="w-full rounded-xl border border-slate-300 px-4 py-2.5 text-sm">{{ $h->observacoes }}</textarea>
+                                </div>
+                            </div>
+                            <div class="flex justify-end gap-3 border-t border-slate-200 px-6 py-4">
+                                <button type="button" @click="editOpen = null" class="rounded-xl border border-slate-300 px-4 py-2 text-sm">Cancelar</button>
+                                <button type="submit" class="rounded-xl bg-blue-600 px-4 py-2 text-sm text-white hover:bg-blue-700">Atualizar</button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        @endforeach
     @endcan
 </div>

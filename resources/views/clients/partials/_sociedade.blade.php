@@ -1,5 +1,5 @@
 {{-- Sociedade — sócios e administradores. Reutilizado em Cadastro > Sócio/Administrador. --}}
-<div x-data="{ openSocio: false }" class="space-y-4">
+<div x-data="{ openSocio: false, editOpen: null }" class="space-y-4">
     <div class="rounded-2xl border border-slate-200 bg-white p-5">
         <div class="mb-4 flex items-center justify-between">
             <div>
@@ -51,10 +51,16 @@
                                 </td>
                                 @can('clients.edit')
                                     <td class="px-3 py-2 text-right">
-                                        <form method="POST" action="{{ route('clients.socios.destroy', [$client, $s]) }}" class="inline">
-                                            @csrf @method('DELETE')
-                                            <button onclick="return confirm('Remover?')" class="rounded-lg border border-red-200 px-2 py-1 text-xs text-red-600 hover:bg-red-50">Remover</button>
-                                        </form>
+                                        <div class="inline-flex gap-1">
+                                            <button type="button" @click="editOpen = {{ $s->id }}"
+                                                    class="rounded-lg border border-amber-300 px-2 py-1 text-xs font-medium text-amber-700 hover:bg-amber-50">
+                                                Editar
+                                            </button>
+                                            <form method="POST" action="{{ route('clients.socios.destroy', [$client, $s]) }}" class="inline">
+                                                @csrf @method('DELETE')
+                                                <button onclick="return confirm('Remover?')" class="rounded-lg border border-red-200 px-2 py-1 text-xs text-red-600 hover:bg-red-50">Remover</button>
+                                            </form>
+                                        </div>
                                     </td>
                                 @endcan
                             </tr>
@@ -123,5 +129,66 @@
                 </div>
             </div>
         </div>
+
+        {{-- Modais de edição --}}
+        @foreach ($client->socios as $s)
+            <div x-show="editOpen === {{ $s->id }}" x-cloak class="fixed inset-0 z-[9999] overflow-y-auto bg-black/50">
+                <div class="flex min-h-full items-center justify-center p-4">
+                    <div @click.away="editOpen = null" class="w-full max-w-2xl rounded-2xl bg-white shadow-2xl" x-data="{ papel: '{{ $s->papel }}' }">
+                        <form method="POST" action="{{ route('clients.socios.update', [$client, $s]) }}">
+                            @csrf @method('PUT')
+                            <div class="border-b border-slate-200 px-6 py-4">
+                                <h3 class="text-lg font-semibold text-slate-900">Editar sócio / administrador</h3>
+                            </div>
+                            <div class="grid grid-cols-1 gap-4 p-6 md:grid-cols-2">
+                                <div>
+                                    <label class="mb-1 block text-sm font-medium text-slate-700">Papel</label>
+                                    <select name="papel" x-model="papel" class="w-full rounded-xl border border-slate-300 px-4 py-2.5 text-sm">
+                                        <option value="socio" {{ $s->papel === 'socio' ? 'selected' : '' }}>Sócio</option>
+                                        <option value="administrador" {{ $s->papel === 'administrador' ? 'selected' : '' }}>Administrador</option>
+                                    </select>
+                                </div>
+                                <div>
+                                    <label class="mb-1 block text-sm font-medium text-slate-700">Quota de participação (%)</label>
+                                    <input type="number" step="0.0001" min="0" max="100" name="quota_participacao" value="{{ $s->quota_participacao }}" class="w-full rounded-xl border border-slate-300 px-4 py-2.5 text-sm">
+                                </div>
+                                <div class="md:col-span-2">
+                                    <label class="mb-1 block text-sm font-medium text-slate-700">Nome *</label>
+                                    <input type="text" name="nome" value="{{ $s->nome }}" required class="w-full rounded-xl border border-slate-300 px-4 py-2.5 text-sm">
+                                </div>
+                                <div>
+                                    <label class="mb-1 block text-sm font-medium text-slate-700">E-mail</label>
+                                    <input type="email" name="email" value="{{ $s->email }}" class="w-full rounded-xl border border-slate-300 px-4 py-2.5 text-sm">
+                                </div>
+                                <div>
+                                    <label class="mb-1 block text-sm font-medium text-slate-700">Telefone</label>
+                                    <input type="text" name="telefone" value="{{ $s->telefone }}" class="w-full rounded-xl border border-slate-300 px-4 py-2.5 text-sm">
+                                </div>
+                                <template x-if="papel === 'administrador'">
+                                    <div class="md:col-span-2 grid grid-cols-1 gap-4 md:grid-cols-2 rounded-xl border border-purple-200 bg-purple-50 p-3">
+                                        <div>
+                                            <label class="mb-1 block text-sm font-medium text-slate-700">Início do mandato</label>
+                                            <input type="date" name="mandato_inicio" value="{{ $s->mandato_inicio?->format('Y-m-d') }}" class="w-full rounded-xl border border-slate-300 px-4 py-2.5 text-sm">
+                                        </div>
+                                        <div>
+                                            <label class="mb-1 block text-sm font-medium text-slate-700">Término do mandato</label>
+                                            <input type="date" name="mandato_termino" value="{{ $s->mandato_termino?->format('Y-m-d') }}" class="w-full rounded-xl border border-slate-300 px-4 py-2.5 text-sm">
+                                        </div>
+                                    </div>
+                                </template>
+                                <div class="md:col-span-2">
+                                    <label class="mb-1 block text-sm font-medium text-slate-700">Observações</label>
+                                    <textarea name="observacoes" rows="2" class="w-full rounded-xl border border-slate-300 px-4 py-2.5 text-sm">{{ $s->observacoes }}</textarea>
+                                </div>
+                            </div>
+                            <div class="flex justify-end gap-3 border-t border-slate-200 px-6 py-4">
+                                <button type="button" @click="editOpen = null" class="rounded-xl border border-slate-300 px-4 py-2 text-sm">Cancelar</button>
+                                <button class="rounded-xl bg-blue-600 px-4 py-2 text-sm text-white hover:bg-blue-700">Atualizar</button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        @endforeach
     @endcan
 </div>

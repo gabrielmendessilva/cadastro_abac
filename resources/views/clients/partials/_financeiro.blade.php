@@ -1,5 +1,5 @@
 {{-- Aba FINANCEIRO --}}
-<div x-data="{ open: false, editId: null }" class="space-y-6">
+<div x-data="{ open: false, editOpen: null }" class="space-y-6">
     <div>
         <h2 class="text-lg font-semibold text-slate-900">Financeiro</h2>
         <p class="text-sm text-slate-500">E-mails para boletos, contratos ativos e responsáveis.</p>
@@ -69,13 +69,19 @@
                                 </td>
                                 @can('clients.edit')
                                     <td class="px-3 py-2 text-right">
-                                        <form method="POST" action="{{ route('clients.contratos.destroy', [$client, $c]) }}" class="inline">
-                                            @csrf @method('DELETE')
-                                            <button onclick="return confirm('Remover contrato?')"
-                                                    class="rounded-lg border border-red-200 px-2 py-1 text-xs text-red-600 hover:bg-red-50">
-                                                Remover
+                                        <div class="inline-flex gap-1">
+                                            <button type="button" @click="editOpen = {{ $c->id }}"
+                                                    class="rounded-lg border border-amber-300 px-2 py-1 text-xs font-medium text-amber-700 hover:bg-amber-50">
+                                                Editar
                                             </button>
-                                        </form>
+                                            <form method="POST" action="{{ route('clients.contratos.destroy', [$client, $c]) }}" class="inline">
+                                                @csrf @method('DELETE')
+                                                <button onclick="return confirm('Remover contrato?')"
+                                                        class="rounded-lg border border-red-200 px-2 py-1 text-xs text-red-600 hover:bg-red-50">
+                                                    Remover
+                                                </button>
+                                            </form>
+                                        </div>
                                     </td>
                                 @endcan
                             </tr>
@@ -124,6 +130,48 @@
                     </div>
                 </div>
             </div>
+
+            {{-- Modais de edição --}}
+            @foreach ($client->contratos as $c)
+                <div x-show="editOpen === {{ $c->id }}" x-cloak class="fixed inset-0 z-[9999] overflow-y-auto bg-black/50">
+                    <div class="flex min-h-full items-center justify-center p-4">
+                        <div @click.away="editOpen = null" class="w-full max-w-2xl rounded-2xl bg-white shadow-2xl">
+                            <form method="POST" action="{{ route('clients.contratos.update', [$client, $c]) }}">
+                                @csrf @method('PUT')
+                                <div class="border-b border-slate-200 px-6 py-4">
+                                    <h3 class="text-lg font-semibold text-slate-900">Editar contrato</h3>
+                                </div>
+                                <div class="grid grid-cols-1 gap-4 p-6 md:grid-cols-2">
+                                    <div class="md:col-span-2">
+                                        <label class="mb-1 block text-sm font-medium text-slate-700">Descrição</label>
+                                        <input type="text" name="descricao" value="{{ $c->descricao }}" class="w-full rounded-xl border border-slate-300 px-4 py-2.5 text-sm">
+                                    </div>
+                                    <div>
+                                        <label class="mb-1 block text-sm font-medium text-slate-700">Responsável</label>
+                                        <input type="text" name="responsavel" value="{{ $c->responsavel }}" class="w-full rounded-xl border border-slate-300 px-4 py-2.5 text-sm">
+                                    </div>
+                                    <div>
+                                        <label class="mb-1 block text-sm font-medium text-slate-700">Vencimento</label>
+                                        <input type="date" name="dt_vencimento" value="{{ $c->dt_vencimento?->format('Y-m-d') }}" class="w-full rounded-xl border border-slate-300 px-4 py-2.5 text-sm">
+                                    </div>
+                                    <label class="flex items-center gap-2 text-sm">
+                                        <input type="checkbox" name="ativo" value="1" @checked($c->ativo) class="rounded">
+                                        Contrato ativo
+                                    </label>
+                                    <div class="md:col-span-2">
+                                        <label class="mb-1 block text-sm font-medium text-slate-700">Observações</label>
+                                        <textarea name="observacoes" rows="2" class="w-full rounded-xl border border-slate-300 px-4 py-2.5 text-sm">{{ $c->observacoes }}</textarea>
+                                    </div>
+                                </div>
+                                <div class="flex justify-end gap-3 border-t border-slate-200 px-6 py-4">
+                                    <button type="button" @click="editOpen = null" class="rounded-xl border border-slate-300 px-4 py-2 text-sm">Cancelar</button>
+                                    <button class="rounded-xl bg-blue-600 px-4 py-2 text-sm text-white hover:bg-blue-700">Atualizar</button>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+            @endforeach
         @endcan
     </div>
 </div>

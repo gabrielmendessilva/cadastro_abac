@@ -81,6 +81,24 @@ class ListaController extends Controller
         return redirect()->route('listas.index', ['aba' => $aba])->with('success', 'Item adicionado.');
     }
 
+    public function update(Request $request, string $aba, int $id)
+    {
+        abort_unless(auth()->user()->can('clients.edit'), 403);
+        abort_unless(isset(self::RECURSOS[$aba]), 404);
+
+        $recurso = self::RECURSOS[$aba];
+        $rules = [];
+        foreach ($recurso['campos'] as $campo) {
+            $rules[$campo] = ['nullable', 'string', 'max:255'];
+        }
+        $rules[$recurso['campos'][0]][] = 'required';
+
+        $data = $request->validate($rules);
+        $recurso['model']::findOrFail($id)->update($data);
+
+        return redirect()->route('listas.index', ['aba' => $aba])->with('success', 'Item atualizado.');
+    }
+
     public function destroy(string $aba, int $id)
     {
         abort_unless(auth()->user()->can('clients.edit'), 403);

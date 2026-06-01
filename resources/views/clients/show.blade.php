@@ -313,6 +313,56 @@
             @endif
 
             @if ($activeTab === 'enderecos')
+                {{-- Alpine helper de consulta de CEP (ViaCEP + OpenCEP) --}}
+                <script>
+                    function addressForm(initial = {}) {
+                        return {
+                            cep:        initial.cep        || '',
+                            rua:        initial.rua        || '',
+                            bairro:     initial.bairro     || '',
+                            municipio:  initial.municipio  || '',
+                            estado:     initial.estado     || '',
+                            cod_ibge:   initial.cod_ibge   || '',
+                            pais:       initial.pais       || '',
+                            cepStatus:  '',   // '', 'loading', 'ok', 'error'
+                            cepMessage: '',
+                            formatCep() {
+                                const v = (this.cep || '').replace(/\D/g, '').slice(0, 8);
+                                this.cep = v.length > 5 ? `${v.slice(0, 5)}-${v.slice(5)}` : v;
+                                if (v.length === 8) this.lookupCep();
+                            },
+                            async lookupCep() {
+                                const clean = (this.cep || '').replace(/\D/g, '');
+                                if (clean.length !== 8) return;
+                                this.cepStatus  = 'loading';
+                                this.cepMessage = 'Consultando CEP...';
+                                try {
+                                    const res = await fetch(`/api/cep/${clean}`, {
+                                        headers: { 'Accept': 'application/json' },
+                                    });
+                                    const data = await res.json();
+                                    if (!data.ok) {
+                                        this.cepStatus  = 'error';
+                                        this.cepMessage = data.message || 'Não foi possível consultar, digite manualmente os dados do endereço.';
+                                        return;
+                                    }
+                                    this.rua       = data.rua       || this.rua;
+                                    this.bairro    = data.bairro    || this.bairro;
+                                    this.municipio = data.municipio || this.municipio;
+                                    this.estado    = data.estado    || this.estado;
+                                    this.cod_ibge  = data.cod_ibge  || this.cod_ibge;
+                                    this.pais      = data.pais      || this.pais || 'Brasil';
+                                    this.cepStatus  = 'ok';
+                                    this.cepMessage = `Endereço preenchido via ${(data.fonte || '').toUpperCase()}.`;
+                                } catch (e) {
+                                    this.cepStatus  = 'error';
+                                    this.cepMessage = 'Não foi possível consultar, digite manualmente os dados do endereço.';
+                                }
+                            },
+                        };
+                    }
+                </script>
+
                 <div x-data="{ createOpen: false, editOpen: null }" class="space-y-4">
                     <div class="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
                         <div>
@@ -414,10 +464,11 @@
                         <div x-show="createOpen" x-cloak class="fixed inset-0 z-[9999] overflow-y-auto bg-black/50">
                             <div class="flex min-h-full items-center justify-center p-4">
                                 <div @click.away="createOpen = false" class="relative my-8 w-full max-w-4xl rounded-2xl bg-white shadow-2xl max-h-[90vh] overflow-y-auto">
-                                    <form method="POST" action="{{ route('clients.addresses.store', $client) }}">
+                                    <form method="POST" action="{{ route('clients.addresses.store', $client) }}" x-data="addressForm()">
                                         @csrf
                                         <div class="border-b border-slate-200 px-6 py-4">
                                             <h3 class="text-lg font-semibold text-slate-900">Adicionar endereço</h3>
+                                            <p class="mt-1 text-xs text-slate-500">Preencha o CEP e os campos serão buscados automaticamente.</p>
                                         </div>
 
                                         <div class="grid grid-cols-1 gap-4 p-6 md:grid-cols-2 xl:grid-cols-4">
@@ -425,17 +476,27 @@
                                                 <label class="mb-1 block text-sm font-medium text-slate-700">Tipo do endereço</label>
                                                 <select name="tipo" class="w-full rounded-xl border border-slate-300 px-4 py-2.5 text-sm">
                                                     @foreach (\App\Models\ClientEndereco::TIPOS as $key => $label)
-                                                        <option value="{{ $key }}" {{ ($address->tipo ?? 'outro') === $key ? 'selected' : '' }}>{{ $label }}</option>
+                                                        <option value="{{ $key }}">{{ $label }}</option>
                                                     @endforeach
                                                 </select>
                                             </div>
                                             <div>
-                                                <label class="mb-1 block text-sm font-medium text-slate-700">CEP</label>
-                                                <input type="text" name="cep" class="w-full rounded-xl border border-slate-300 px-4 py-2.5 text-sm">
+                                                <label class="mb-1 flex items-center justify-between text-sm font-medium text-slate-700">
+                                                    <span>CEP</span>
+                                                    <span x-show="cepStatus === 'loading'" class="text-xs text-blue-600">⏳</span>
+                                                </label>
+                                                <input type="text" name="cep" x-model="cep" @input="formatCep" maxlength="9" placeholder="00000-000"
+                                                       class="w-full rounded-xl border px-4 py-2.5 text-sm"
+                                                       :class="cepStatus === 'error' ? 'border-rose-300 bg-rose-50' : (cepStatus === 'ok' ? 'border-emerald-300 bg-emerald-50' : 'border-slate-300')">
                                             </div>
                                             <div class="xl:col-span-2">
                                                 <label class="mb-1 block text-sm font-medium text-slate-700">Rua</label>
-                                                <input type="text" name="rua" class="w-full rounded-xl border border-slate-300 px-4 py-2.5 text-sm">
+                                                <input type="text" name="rua" x-model="rua" class="w-full rounded-xl border border-slate-300 px-4 py-2.5 text-sm">
+                                            </div>
+                                            <div x-show="cepMessage" class="md:col-span-2 xl:col-span-4">
+                                                <p class="text-xs"
+                                                   :class="cepStatus === 'error' ? 'text-rose-600' : 'text-emerald-600'"
+                                                   x-text="cepMessage"></p>
                                             </div>
                                             <div>
                                                 <label class="mb-1 block text-sm font-medium text-slate-700">Número</label>
@@ -447,23 +508,23 @@
                                             </div>
                                             <div>
                                                 <label class="mb-1 block text-sm font-medium text-slate-700">Bairro</label>
-                                                <input type="text" name="bairro" class="w-full rounded-xl border border-slate-300 px-4 py-2.5 text-sm">
+                                                <input type="text" name="bairro" x-model="bairro" class="w-full rounded-xl border border-slate-300 px-4 py-2.5 text-sm">
                                             </div>
                                             <div>
                                                 <label class="mb-1 block text-sm font-medium text-slate-700">País</label>
-                                                <input type="text" name="pais" class="w-full rounded-xl border border-slate-300 px-4 py-2.5 text-sm">
+                                                <input type="text" name="pais" x-model="pais" class="w-full rounded-xl border border-slate-300 px-4 py-2.5 text-sm">
                                             </div>
                                             <div>
                                                 <label class="mb-1 block text-sm font-medium text-slate-700">Estado</label>
-                                                <input type="text" name="estado" class="w-full rounded-xl border border-slate-300 px-4 py-2.5 text-sm">
+                                                <input type="text" name="estado" x-model="estado" class="w-full rounded-xl border border-slate-300 px-4 py-2.5 text-sm">
                                             </div>
                                             <div>
                                                 <label class="mb-1 block text-sm font-medium text-slate-700">Código IBGE</label>
-                                                <input type="text" name="cod_ibge" class="w-full rounded-xl border border-slate-300 px-4 py-2.5 text-sm">
+                                                <input type="text" name="cod_ibge" x-model="cod_ibge" class="w-full rounded-xl border border-slate-300 px-4 py-2.5 text-sm">
                                             </div>
                                             <div>
                                                 <label class="mb-1 block text-sm font-medium text-slate-700">Município</label>
-                                                <input type="text" name="municipio" class="w-full rounded-xl border border-slate-300 px-4 py-2.5 text-sm">
+                                                <input type="text" name="municipio" x-model="municipio" class="w-full rounded-xl border border-slate-300 px-4 py-2.5 text-sm">
                                             </div>
                                         </div>
 
@@ -486,12 +547,25 @@
                             <div x-show="editOpen === 'address-{{ $address->id }}'" x-cloak class="fixed inset-0 z-[9999] overflow-y-auto bg-black/50">
                                 <div class="flex min-h-full items-center justify-center p-4">
                                     <div @click.away="editOpen = null" class="relative my-8 w-full max-w-4xl rounded-2xl bg-white shadow-2xl max-h-[90vh] overflow-y-auto">
-                                        <form method="POST" action="{{ route('clients.addresses.update', [$client, $address]) }}">
+                                        @php
+                                            $addressInitial = [
+                                                'cep'       => (string) ($address->cep ?? ''),
+                                                'rua'       => (string) ($address->rua ?? ''),
+                                                'bairro'    => (string) ($address->bairro ?? ''),
+                                                'municipio' => (string) ($address->municipio ?? ''),
+                                                'estado'    => (string) ($address->estado ?? ''),
+                                                'cod_ibge'  => (string) ($address->cod_ibge ?? ''),
+                                                'pais'      => (string) ($address->pais ?? ''),
+                                            ];
+                                        @endphp
+                                        <form method="POST" action="{{ route('clients.addresses.update', [$client, $address]) }}"
+                                              x-data="addressForm({{ json_encode($addressInitial, JSON_HEX_APOS | JSON_HEX_QUOT) }})">
                                             @csrf
                                             @method('PUT')
 
                                             <div class="border-b border-slate-200 px-6 py-4">
                                                 <h3 class="text-lg font-semibold text-slate-900">Editar endereço</h3>
+                                                <p class="mt-1 text-xs text-slate-500">Alterando o CEP os demais campos serão atualizados automaticamente.</p>
                                             </div>
 
                                             <div class="grid grid-cols-1 gap-4 p-6 md:grid-cols-2 xl:grid-cols-4">
@@ -504,12 +578,22 @@
                                                     </select>
                                                 </div>
                                                 <div>
-                                                    <label class="mb-1 block text-sm font-medium text-slate-700">CEP</label>
-                                                    <input type="text" name="cep" value="{{ $address->cep }}" class="w-full rounded-xl border border-slate-300 px-4 py-2.5 text-sm">
+                                                    <label class="mb-1 flex items-center justify-between text-sm font-medium text-slate-700">
+                                                        <span>CEP</span>
+                                                        <span x-show="cepStatus === 'loading'" class="text-xs text-blue-600">⏳</span>
+                                                    </label>
+                                                    <input type="text" name="cep" x-model="cep" @input="formatCep" maxlength="9" placeholder="00000-000"
+                                                           class="w-full rounded-xl border px-4 py-2.5 text-sm"
+                                                           :class="cepStatus === 'error' ? 'border-rose-300 bg-rose-50' : (cepStatus === 'ok' ? 'border-emerald-300 bg-emerald-50' : 'border-slate-300')">
                                                 </div>
                                                 <div class="xl:col-span-2">
                                                     <label class="mb-1 block text-sm font-medium text-slate-700">Rua</label>
-                                                    <input type="text" name="rua" value="{{ $address->rua }}" class="w-full rounded-xl border border-slate-300 px-4 py-2.5 text-sm">
+                                                    <input type="text" name="rua" x-model="rua" class="w-full rounded-xl border border-slate-300 px-4 py-2.5 text-sm">
+                                                </div>
+                                                <div x-show="cepMessage" class="md:col-span-2 xl:col-span-4">
+                                                    <p class="text-xs"
+                                                       :class="cepStatus === 'error' ? 'text-rose-600' : 'text-emerald-600'"
+                                                       x-text="cepMessage"></p>
                                                 </div>
                                                 <div>
                                                     <label class="mb-1 block text-sm font-medium text-slate-700">Número</label>
@@ -521,23 +605,23 @@
                                                 </div>
                                                 <div>
                                                     <label class="mb-1 block text-sm font-medium text-slate-700">Bairro</label>
-                                                    <input type="text" name="bairro" value="{{ $address->bairro }}" class="w-full rounded-xl border border-slate-300 px-4 py-2.5 text-sm">
+                                                    <input type="text" name="bairro" x-model="bairro" class="w-full rounded-xl border border-slate-300 px-4 py-2.5 text-sm">
                                                 </div>
                                                 <div>
                                                     <label class="mb-1 block text-sm font-medium text-slate-700">País</label>
-                                                    <input type="text" name="pais" value="{{ $address->pais }}" class="w-full rounded-xl border border-slate-300 px-4 py-2.5 text-sm">
+                                                    <input type="text" name="pais" x-model="pais" class="w-full rounded-xl border border-slate-300 px-4 py-2.5 text-sm">
                                                 </div>
                                                 <div>
                                                     <label class="mb-1 block text-sm font-medium text-slate-700">Estado</label>
-                                                    <input type="text" name="estado" value="{{ $address->estado }}" class="w-full rounded-xl border border-slate-300 px-4 py-2.5 text-sm">
+                                                    <input type="text" name="estado" x-model="estado" class="w-full rounded-xl border border-slate-300 px-4 py-2.5 text-sm">
                                                 </div>
                                                 <div>
                                                     <label class="mb-1 block text-sm font-medium text-slate-700">Código IBGE</label>
-                                                    <input type="text" name="cod_ibge" value="{{ $address->cod_ibge }}" class="w-full rounded-xl border border-slate-300 px-4 py-2.5 text-sm">
+                                                    <input type="text" name="cod_ibge" x-model="cod_ibge" class="w-full rounded-xl border border-slate-300 px-4 py-2.5 text-sm">
                                                 </div>
                                                 <div>
                                                     <label class="mb-1 block text-sm font-medium text-slate-700">Município</label>
-                                                    <input type="text" name="municipio" value="{{ $address->municipio }}" class="w-full rounded-xl border border-slate-300 px-4 py-2.5 text-sm">
+                                                    <input type="text" name="municipio" x-model="municipio" class="w-full rounded-xl border border-slate-300 px-4 py-2.5 text-sm">
                                                 </div>
                                             </div>
 
