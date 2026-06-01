@@ -73,47 +73,62 @@
                         @php
                             $fieldHints = [
                                 'Código Omie' => ['hint' => 'Bloqueado para alterações acidentais. Use o botão Editar para modificar.', 'locked' => true],
-                                'Classificação' => ['hint' => 'Definição pendente — confirmar com o cliente.', 'pending' => true],
+                                'Sub Categoria' => ['hint' => 'Subcategoria vinculada à Categoria — confirmar com o cliente.', 'pending' => true],
                                 'Situação ABAC' => ['hint' => 'Definição pendente — confirmar com o cliente.', 'pending' => true],
                                 'Classificação Administradora' => ['hint' => 'Definição pendente — confirmar com o cliente.', 'pending' => true],
                             ];
 
+                            $boolFields = ['Associado ABAC', 'Associado SINAC'];
+                            $wideFields = ['Razão Social', 'Responsável pela empresa', 'E-mail da empresa', 'E-mail ouvidoria da empresa', 'Contato Admin', 'Segmentos', 'Área de Atuação', 'E-mail CONAC'];
+
                             $fields = [
-                                'Código Omie' => $client->cod_omie,
-                                'Nome Fantasia' => $client->nome_fantasia,
-                                'Nome / Razão Social' => $client->nome,
-                                'Classificação' => $client->classificacao,
-                                'Categoria' => $client->categoria,
-                                'CPF/CNPJ' => $client->cpf_cnpj,
-                                'Inscrição Estadual' => $client->inscri_estadual,
-                                'Inscrição Municipal' => $client->inscri_municipal,
-                                'Tipo Cliente' => $client->tipo_cliente,
-                                'Status' => $client->status,
-                                'Telefone' => $client->telefone,
-                                'Celular Admin' => $client->celular_admin,
-                                'E-mail Admin' => $client->email_admin,
-                                'Contato Admin' => $client->contato_name_admin,
-                                'Regional' => $client->regional,
-                                'Associado' => $client->associado,
-                                'Situação ABAC' => $client->situacao_abac,
-                                'Data BACEN' => $client->dt_bacen ? \Carbon\Carbon::parse($client->dt_bacen)->format('d/m/Y') : null,
+                                // === Bloco principal (ordem solicitada) ===
+                                'Nome Fantasia'              => $client->nome_fantasia,
+                                'Razão Social'               => $client->nome,
+                                'Associado ABAC'             => $client->associado_abac ? 'Sim' : 'Não',
+                                'Associado SINAC'            => $client->associado_sinac ? 'Sim' : 'Não',
+                                'Categoria'                  => $client->categoria,
+                                'Sub Categoria'              => $client->classificacao,
+                                'CNPJ/CPF'                   => $client->cpf_cnpj,
+                                'Regional'                   => $client->regional,
+                                'Inscrição Estadual'         => $client->inscri_estadual,
+                                'Inscrição Municipal'        => $client->inscri_municipal,
+                                'Status da Empresa'          => $client->status_empresa,
+                                'Responsável pela empresa'   => $client->responsavel_empresa,
+                                'E-mail da empresa'          => $client->email_admin,
+                                'Telefone da empresa'        => $client->telefone,
+                                'E-mail ouvidoria da empresa'   => $client->email_ouvidoria,
+                                'Telefone ouvidoria da empresa' => $client->telefone_ouvidoria,
+
+                                // === Demais campos (mantidos) ===
+                                'Código Omie'                => $client->cod_omie,
+                                'Tipo Cliente'               => $client->tipo_cliente,
+                                'Celular Admin'              => $client->celular_admin,
+                                'Contato Admin'              => $client->contato_name_admin,
+                                'Associado'                  => $client->associado,
+                                'Situação ABAC'              => $client->situacao_abac,
                                 'Classificação Administradora' => $client->classificao_administradora,
-                                'E-mail CONAC' => $client->email_conac,
-                                'Segmentos' => $client->segmentos,
-                                'Área de Atuação' => $client->area_atuacao,
-                                'E-mail 2' => $client->email_2,
-                                'E-mail 3' => $client->email_3,
-                                'E-mail 4' => $client->email_4,
-                                'E-mail 5' => $client->email_5,
-                                'E-mail 6' => $client->email_6,
-                                'E-mail 7' => $client->email_7,
-                                'Associado ABAC' => $client->associado_abac ? 'Sim' : 'Não',
+                                'Data BACEN'                 => $client->dt_bacen ? \Carbon\Carbon::parse($client->dt_bacen)->format('d/m/Y') : null,
+                                'E-mail CONAC'               => $client->email_conac,
+                                'Segmentos'                  => $client->segmentos,
+                                'Área de Atuação'            => $client->area_atuacao,
+                                'E-mail 2'                   => $client->email_2,
+                                'E-mail 3'                   => $client->email_3,
+                                'E-mail 4'                   => $client->email_4,
+                                'E-mail 5'                   => $client->email_5,
+                                'E-mail 6'                   => $client->email_6,
+                                'E-mail 7'                   => $client->email_7,
                             ];
                         @endphp
 
                         @foreach ($fields as $label => $value)
-                            @php $hint = $fieldHints[$label] ?? null; @endphp
-                            <div class="{{ in_array($label, ['Nome / Razão Social', 'E-mail Admin', 'Contato Admin', 'Segmentos', 'Área de Atuação']) ? 'md:col-span-2' : '' }}">
+                            @php
+                                $hint = $fieldHints[$label] ?? null;
+                                $isBool = in_array($label, $boolFields, true);
+                                $isSim = $isBool && $value === 'Sim';
+                                $isNao = $isBool && $value === 'Não';
+                            @endphp
+                            <div class="{{ in_array($label, $wideFields, true) ? 'md:col-span-2' : '' }}">
                                 <label class="mb-1 flex items-center gap-1 text-sm font-medium text-slate-700">
                                     <span>{{ $label }}</span>
                                     @if($hint)
@@ -123,7 +138,11 @@
                                         <span class="ml-auto rounded-full bg-slate-200 px-2 py-0.5 text-[10px] font-semibold uppercase text-slate-600">🔒 bloqueado</span>
                                     @endif
                                 </label>
-                                <div class="rounded-xl border {{ ($hint['pending'] ?? false) && empty($value) ? 'border-amber-200 bg-amber-50' : 'border-slate-200 bg-slate-50' }} px-4 py-3 text-sm text-slate-800">
+                                <div class="rounded-xl border
+                                    {{ $isSim ? 'border-emerald-200 bg-emerald-50 text-emerald-700 font-semibold' : '' }}
+                                    {{ $isNao ? 'border-slate-200 bg-slate-50 text-slate-500 font-semibold' : '' }}
+                                    {{ !$isBool ? (($hint['pending'] ?? false) && empty($value) ? 'border-amber-200 bg-amber-50' : 'border-slate-200 bg-slate-50') : '' }}
+                                    px-4 py-3 text-sm text-slate-800">
                                     {{ $value ?: (($hint['pending'] ?? false) ? '(definir com o cliente)' : '-') }}
                                 </div>
                             </div>
