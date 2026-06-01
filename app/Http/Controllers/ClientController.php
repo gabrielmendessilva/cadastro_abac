@@ -15,21 +15,25 @@ class ClientController extends Controller
 
         $clients = Client::query()
             ->withCount('documents')
+            ->with(['enderecos' => fn ($q) => $q->orderByRaw("FIELD(tipo, 'principal','pagamento','entrega') ASC")->limit(1)])
             ->when($request->filled('search'), function ($query) use ($request) {
-                $search = $request->string('search');
+                $search = (string) $request->string('search');
 
                 $query->where(function ($subQuery) use ($search) {
-                    $subQuery->where('name', 'like', "%{$search}%")
-                        ->orWhere('fantasy_name', 'like', "%{$search}%")
-                        ->orWhere('document', 'like', "%{$search}%")
-                        ->orWhere('email', 'like', "%{$search}%");
+                    $subQuery->where('nome', 'like', "%{$search}%")
+                        ->orWhere('nome_fantasia', 'like', "%{$search}%")
+                        ->orWhere('nome_comercial', 'like', "%{$search}%")
+                        ->orWhere('cpf_cnpj', 'like', "%{$search}%")
+                        ->orWhere('cpf', 'like', "%{$search}%")
+                        ->orWhere('email_admin', 'like', "%{$search}%")
+                        ->orWhere('cod_omie', 'like', "%{$search}%");
                 });
             })
             ->when($request->filled('status'), function ($query) use ($request) {
                 $query->where('status', $request->status === '1');
             })
-            ->when($request->filled('state'), fn($query) => $query->where('state', $request->string('state')))
-            ->when($request->filled('city'), fn($query) => $query->where('city', 'like', '%' . $request->string('city') . '%'))
+            ->when($request->filled('state'), fn($query) => $query->whereHas('enderecos', fn($q) => $q->where('estado', $request->string('state'))))
+            ->when($request->filled('city'), fn($query) => $query->whereHas('enderecos', fn($q) => $q->where('municipio', 'like', '%' . $request->string('city') . '%')))
             ->latest()
             ->paginate(10)
             ->withQueryString();

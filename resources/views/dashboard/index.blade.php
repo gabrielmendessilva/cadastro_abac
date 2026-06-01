@@ -32,13 +32,14 @@
         </div>
         <div class="space-y-3">
             @forelse($latestClients as $client)
-                <div class="rounded-2xl border border-slate-200 p-4 flex justify-between items-center">
-                    <div>
-                        <p class="font-medium">{{ $client->name }}</p>
-                        <p class="text-sm text-slate-500">{{ $client->document }}</p>
+                <a href="{{ route('clients.show', ['client' => $client, 'tab' => 'geral']) }}"
+                   class="block rounded-2xl border border-slate-200 p-4 flex justify-between items-center hover:bg-slate-50">
+                    <div class="min-w-0">
+                        <p class="font-medium truncate">{{ $client->nome ?: $client->nome_fantasia ?: '—' }}</p>
+                        <p class="text-sm text-slate-500">{{ $client->cpf_cnpj ?: '-' }}</p>
                     </div>
-                    <span class="text-sm {{ $client->status ? 'text-emerald-600' : 'text-slate-500' }}">{{ $client->status ? 'Ativo' : 'Inativo' }}</span>
-                </div>
+                    <span class="text-sm shrink-0 ml-3 {{ $client->status ? 'text-emerald-600' : 'text-slate-500' }}">{{ $client->status ? 'Ativo' : 'Inativo' }}</span>
+                </a>
             @empty
                 <p class="text-slate-500">Nenhum cliente cadastrado.</p>
             @endforelse
@@ -56,7 +57,7 @@
             @forelse($latestDocuments as $document)
                 <div class="rounded-2xl border border-slate-200 p-4">
                     <p class="font-medium">{{ $document->title }}</p>
-                    <p class="text-sm text-slate-500">Cliente: {{ $document->client->name ?? '-' }}</p>
+                    <p class="text-sm text-slate-500">Cliente: {{ $document->client->nome ?? '-' }}</p>
                 </div>
             @empty
                 <p class="text-slate-500">Nenhum documento enviado.</p>

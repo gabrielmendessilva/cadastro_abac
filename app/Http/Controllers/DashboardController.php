@@ -17,8 +17,8 @@ class DashboardController extends Controller
             'active_clients' => Client::where('status', true)->count(),
         ];
 
-        $latestClients = Client::latest()->take(5)->get();
-        $latestDocuments = Document::with('client')->latest()->take(5)->get();
+        $latestClients = Client::latest()->take(10)->get();
+        $latestDocuments = Document::with('client')->latest()->take(10)->get();
 
         return view('dashboard.index', compact('stats', 'latestClients', 'latestDocuments'));
     }

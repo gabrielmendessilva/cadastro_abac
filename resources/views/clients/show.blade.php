@@ -496,6 +496,14 @@
 
                                             <div class="grid grid-cols-1 gap-4 p-6 md:grid-cols-2 xl:grid-cols-4">
                                                 <div>
+                                                    <label class="mb-1 block text-sm font-medium text-slate-700">Tipo do endereço</label>
+                                                    <select name="tipo" class="w-full rounded-xl border border-slate-300 px-4 py-2.5 text-sm">
+                                                        @foreach (\App\Models\ClientEndereco::TIPOS as $key => $label)
+                                                            <option value="{{ $key }}" {{ $address->tipo === $key ? 'selected' : '' }}>{{ $label }}</option>
+                                                        @endforeach
+                                                    </select>
+                                                </div>
+                                                <div>
                                                     <label class="mb-1 block text-sm font-medium text-slate-700">CEP</label>
                                                     <input type="text" name="cep" value="{{ $address->cep }}" class="w-full rounded-xl border border-slate-300 px-4 py-2.5 text-sm">
                                                 </div>
