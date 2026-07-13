@@ -15,8 +15,6 @@ services:
     image: nginx:1.25-alpine
     container_name: ged_nginx
     restart: unless-stopped
-    ports:
-      - "8080:80"
     volumes:
       - ./docker/nginx/default.conf:/etc/nginx/conf.d/default.conf
       - ./public:/var/www/public
@@ -25,6 +23,12 @@ services:
       - app
     networks:
       - ged_network
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.ged.rule=Host(`ged.abac-admin.cloud`)"
+      - "traefik.http.routers.ged.entrypoints=websecure"
+      - "traefik.http.routers.ged.tls.certresolver=letsencrypt"
+      - "traefik.http.services.ged.loadbalancer.server.port=80"
 
 volumes:
   storage_data:
