@@ -20,9 +20,51 @@ use App\Http\Controllers\ClientTagController;
 use App\Http\Controllers\ListaController;
 use App\Http\Controllers\CepController;
 use App\Http\Controllers\RoleController;
+use App\Http\Controllers\ClientLookupController;
+use App\Http\Controllers\Omie\ContasReceberController as OmieContasReceberController;
+use App\Http\Controllers\Omie\ContasPagarController as OmieContasPagarController;
+use App\Http\Controllers\Omie\BoletosController as OmieBoletosController;
 
 
 Route::redirect('/', '/login');
+
+/*
+|--------------------------------------------------------------------------
+| API pública (SEM auth — paridade com o projeto de origem abac_admin)
+|--------------------------------------------------------------------------
+| Débito técnico documentado no plano de migração Omie: mover para trás de
+| middleware('auth') quando confirmarmos que só o front interno consome.
+*/
+
+// Lookup de Client por CPF/CNPJ.
+Route::get('/api/users/find', [ClientLookupController::class, 'findByDocument'])
+    ->name('api.users.find');
+
+// Integração Omie (financeiro).
+Route::prefix('api/omie')->name('api.omie.')->group(function () {
+    // Contas a Receber — implementação real
+    Route::prefix('lancamentos/contas-receber')->group(function () {
+        Route::post('/create', [OmieContasReceberController::class, 'store'])->name('cr.create');
+        Route::post('/edit',   [OmieContasReceberController::class, 'update'])->name('cr.edit');
+        Route::get('/find',    [OmieContasReceberController::class, 'show'])->name('cr.find');
+        Route::post('/paid',   [OmieContasReceberController::class, 'pay'])->name('cr.paid');
+        Route::post('/cancel', [OmieContasReceberController::class, 'destroy'])->name('cr.cancel');
+    });
+
+    // Contas a Pagar — stubs 501 (URLs preservadas, HTTP correto)
+    Route::prefix('lancamentos/contas-pagar')->group(function () {
+        Route::post('/create', [OmieContasPagarController::class, 'store'])->name('cp.create');
+        Route::post('/edit',   [OmieContasPagarController::class, 'update'])->name('cp.edit');
+        Route::get('/find',    [OmieContasPagarController::class, 'show'])->name('cp.find');
+    });
+
+    // Boletos Contas a Receber — stubs 501
+    Route::prefix('boletos/contas-receber')->group(function () {
+        Route::post('/create', [OmieBoletosController::class, 'store'])->name('bol.create');
+        Route::post('/edit',   [OmieBoletosController::class, 'update'])->name('bol.edit');
+        Route::post('/cancel', [OmieBoletosController::class, 'cancel'])->name('bol.cancel');
+    });
+});
 
 Route::middleware('guest')->group(function () {
     Route::get('/login', [AuthenticatedSessionController::class, 'create'])->name('login');
