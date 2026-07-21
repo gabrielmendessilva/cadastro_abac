@@ -16,6 +16,7 @@ class RmSqlServerReader implements RmReaderInterface
 {
     /**
      * Colunas lidas da FCFO (a tabela tem 194 — buscar só o necessário).
+     *
      * @var list<string>
      */
     private const FCFO_COLUMNS = [
@@ -51,6 +52,8 @@ class RmSqlServerReader implements RmReaderInterface
     public function __construct(
         private readonly ConnectionInterface $connection,
         private readonly LoggerInterface $logger,
+        /** Schema onde vivem as tabelas de dados (o de auditoria é ignorado). */
+        private readonly string $schema = 'dbo',
     ) {}
 
     public function preflight(): void
@@ -113,7 +116,7 @@ class RmSqlServerReader implements RmReaderInterface
             return [];
         }
 
-        $rows = $this->connection->table('FCFOCONTATO')
+        $rows = $this->connection->table($this->qualify('FCFOCONTATO'))
             ->select(self::FCFOCONTATO_COLUMNS)
             ->where(function (Builder $query) use ($codesByColigada): void {
                 foreach ($codesByColigada as $coligada => $codes) {
@@ -128,7 +131,7 @@ class RmSqlServerReader implements RmReaderInterface
         $grouped = [];
         foreach ($rows as $row) {
             $row = (array) $row;
-            $grouped[$row['CODCOLIGADA'] . '|' . trim((string) $row['CODCFO'])][] = $row;
+            $grouped[$row['CODCOLIGADA'].'|'.trim((string) $row['CODCFO'])][] = $row;
         }
 
         return $grouped;
@@ -140,7 +143,7 @@ class RmSqlServerReader implements RmReaderInterface
             return [];
         }
 
-        $rows = $this->connection->table('FCFODEF')
+        $rows = $this->connection->table($this->qualify('FCFODEF'))
             ->select(['CODCOLIGADA', 'CODCOLCFO', 'CODCFO', 'CODCCUSTO'])
             ->whereNotNull('CODCCUSTO')
             ->where(function (Builder $query) use ($codesByColigada): void {
@@ -155,7 +158,7 @@ class RmSqlServerReader implements RmReaderInterface
         $grouped = [];
         foreach ($rows as $row) {
             $row = (array) $row;
-            $grouped[$row['CODCOLCFO'] . '|' . trim((string) $row['CODCFO'])][] = $row;
+            $grouped[$row['CODCOLCFO'].'|'.trim((string) $row['CODCFO'])][] = $row;
         }
 
         return $grouped;
@@ -163,7 +166,7 @@ class RmSqlServerReader implements RmReaderInterface
 
     public function allCentrosCusto(): array
     {
-        return $this->connection->table('GCCUSTO')
+        return $this->connection->table($this->qualify('GCCUSTO'))
             ->select(self::GCCUSTO_COLUMNS)
             ->orderBy('CODCOLIGADA')->orderBy('CODCCUSTO')
             ->get()
@@ -188,8 +191,14 @@ class RmSqlServerReader implements RmReaderInterface
             return [];
         }
 
-        $rows = $this->connection->table('FCFOCONTATOCOMPL')
-            ->select(array_merge(['CODCOLIGADA', 'CODCFO', 'IDCONTATO'], $columns))
+        // array_unique: nome repetido no SELECT faz o SQL Server devolver a
+        // coluna duas vezes e a linha vira um array com chave sobrescrita.
+        $select = array_values(array_unique(
+            array_merge(['CODCOLIGADA', 'CODCFO', 'IDCONTATO'], $columns)
+        ));
+
+        $rows = $this->connection->table($this->qualify('FCFOCONTATOCOMPL'))
+            ->select($select)
             ->where(function (Builder $query) use ($codesByColigada): void {
                 foreach ($codesByColigada as $coligada => $codes) {
                     $query->orWhere(function (Builder $inner) use ($coligada, $codes): void {
@@ -202,7 +211,7 @@ class RmSqlServerReader implements RmReaderInterface
         $keyed = [];
         foreach ($rows as $row) {
             $row = (array) $row;
-            $key = $row['CODCOLIGADA'] . '|' . trim((string) $row['CODCFO']) . '|' . $row['IDCONTATO'];
+            $key = $row['CODCOLIGADA'].'|'.trim((string) $row['CODCFO']).'|'.$row['IDCONTATO'];
             $keyed[$key] = $row;
         }
 
@@ -211,7 +220,7 @@ class RmSqlServerReader implements RmReaderInterface
 
     private function fcfoQuery(?int $coligada): Builder
     {
-        $query = $this->connection->table('FCFO');
+        $query = $this->connection->table($this->qualify('FCFO'));
 
         if ($coligada !== null) {
             $query->where('CODCOLIGADA', $coligada);
@@ -224,14 +233,34 @@ class RmSqlServerReader implements RmReaderInterface
      * @param  list<string>  $tables
      * @return array<string,list<string>> tabela => colunas encontradas
      */
+    /**
+     * Colunas por tabela, restritas ao schema de dados.
+     *
+     * O filtro por TABLE_SCHEMA não é cosmético: instalações do RM com auditoria
+     * ligada mantêm um schema espelho (TOTVSAUDIT) com uma cópia de cada tabela,
+     * acrescida das colunas de log (LOGID, AUDITID, LOGUSER...). Sem o filtro, a
+     * introspecção fundia os dois — o SELECT saía com colunas duplicadas e com
+     * campos que só existem na cópia de auditoria, e o RM devolvia
+     * "Invalid column name 'LOGUSER'".
+     *
+     * @param  list<string>  $tables
+     * @return array<string, list<string>>
+     */
+    /** Prefixa a tabela com o schema de dados, evitando cair no schema de auditoria. */
+    private function qualify(string $table): string
+    {
+        return $this->schema.'.'.$table;
+    }
+
     private function columnsByTable(array $tables): array
     {
         $placeholders = implode(', ', array_fill(0, count($tables), '?'));
 
         $rows = $this->connection->select(
-            'SELECT TABLE_NAME, COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS ' .
-            "WHERE TABLE_NAME IN ({$placeholders}) ORDER BY TABLE_NAME, ORDINAL_POSITION",
-            $tables
+            'SELECT TABLE_NAME, COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS '.
+            "WHERE TABLE_SCHEMA = ? AND TABLE_NAME IN ({$placeholders}) ".
+            'ORDER BY TABLE_NAME, ORDINAL_POSITION',
+            array_merge([$this->schema], $tables)
         );
 
         $found = [];
@@ -240,6 +269,11 @@ class RmSqlServerReader implements RmReaderInterface
             $found[$row['TABLE_NAME']][] = $row['COLUMN_NAME'];
         }
 
-        return $found;
+        // Defesa em profundidade: mesmo dentro de um schema, nunca devolver
+        // nome repetido — duplicata no SELECT quebra a leitura por chave.
+        return array_map(
+            static fn (array $columns): array => array_values(array_unique($columns)),
+            $found
+        );
     }
 }

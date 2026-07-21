@@ -4,6 +4,11 @@ return [
     // Nome da conexão (config/database.php) usada para ler o TOTVS RM.
     'connection' => 'rm',
 
+    // Schema das tabelas de dados. Instalações com auditoria ligada mantêm um
+    // schema espelho (TOTVSAUDIT) com uma cópia de cada tabela mais as colunas
+    // de log — ler de lá quebra a importação com "Invalid column name 'LOGUSER'".
+    'schema' => env('RM_DB_SCHEMA', 'dbo'),
+
     'import' => [
         // Registros FCFO lidos por chunk. Teto prático ~1000 (limite de 2100
         // parâmetros por query do driver sqlsrv nas buscas de contatos/defaults).

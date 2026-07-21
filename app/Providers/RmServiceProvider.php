@@ -20,6 +20,7 @@ class RmServiceProvider extends ServiceProvider
             return new RmSqlServerReader(
                 connection: DB::connection((string) config('rm.connection', 'rm')),
                 logger: Log::channel('rm'),
+                schema: (string) config('rm.schema', 'dbo'),
             );
         });
 
