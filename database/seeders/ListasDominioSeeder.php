@@ -36,6 +36,13 @@ class ListasDominioSeeder extends Seeder
             ['Centro-Oeste', 'Distrito Federal, Goiás, Mato Grosso, Mato Grosso do Sul'],
             ['Sudeste', 'Espírito Santo, Minas Gerais, Rio de Janeiro, São Paulo'],
             ['Sul', 'Paraná, Rio Grande do Sul, Santa Catarina'],
+            // Valores herdados do banco legado abac_admin. Sem estas linhas, 37 dos
+            // 113 clientes com regional não teriam para onde apontar no backfill.
+            ['Sul I', 'Regional histórica do cadastro legado'],
+            ['Sul II', 'Regional histórica do cadastro legado'],
+            ['Norte/Nordeste/Centro-Oeste', 'Regional agrupada do cadastro legado'],
+            ['Internacional', 'Associados fora do Brasil'],
+            ['Estrangeiro', 'Associados fora do Brasil'],
         ];
         foreach ($regionais as [$nome, $desc]) {
             DB::table('regionais')->updateOrInsert(

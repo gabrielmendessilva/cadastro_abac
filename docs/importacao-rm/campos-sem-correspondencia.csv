@@ -1,0 +1,55 @@
+﻿tabela_mysql;coluna;motivo;observacao
+clients;cod_omie;Identificador do cliente na Omie e nao no RM;Clientes novos ficam sem cod_omie ate serem integrados na Omie
+clients;classificacao;Campo do negocio ABAC sem equivalente nas 5 tabelas do RM;RM possui CODTCF (tipo de cli/for) mas a tabela FTCF esta fora do escopo
+clients;categoria;Campo do negocio ABAC sem equivalente no RM;
+clients;regional;Conceito de regional da ABAC nao existe no RM;Poderia ser derivado da UF no futuro se o negocio definir a regra
+clients;associado;Situacao associativa nao existe no RM;
+clients;situacao_abac;Situacao ABAC nao existe no RM;
+clients;dt_bacen;Data de autorizacao Bacen nao existe no RM padrao;Verificar campos opcionais do RM (DATAOP1..3) no reconhecimento antes da carga
+clients;obs_2;Sem fonte (obs ja recebe o CAMPOLIVRE do RM);
+clients;classificao_administradora;Campo do negocio ABAC sem equivalente no RM;
+clients;email_conac;CONAC nao existe no RM;Todos os e-mails do RM ja sao distribuidos em email_admin e email_2..7
+clients;segmentos;Vocabulario de segmentos do app nao existe no RM;RAMOATIV do RM foi mapeado para area_atuacao
+clients;segmento;Vocabulario de segmentos do app nao existe no RM;RAMOATIV do RM foi mapeado para area_atuacao
+clients;nome_comercial;RM so possui NOME e NOMEFANTASIA (ambos ja mapeados);
+clients;outros_nomes;Sem equivalente no RM;
+clients;dt_filiacao_abac;Filiacao ABAC nao existe no RM;Verificar campos opcionais do RM (CAMPOALFAOP1..3 e DATAOP1..3) no reconhecimento
+clients;num_filiacao_abac;Filiacao ABAC nao existe no RM;Verificar campos opcionais do RM (CAMPOALFAOP1..3) no reconhecimento
+clients;dt_desfiliacao_abac;Filiacao ABAC nao existe no RM;
+clients;motivo_desfiliacao_abac;Filiacao ABAC nao existe no RM;
+clients;obs_abac;Campo do negocio ABAC sem equivalente no RM;
+clients;dt_filiacao_sinac;Filiacao SINAC nao existe no RM;Verificar campos opcionais do RM no reconhecimento
+clients;num_filiacao_sinac;Filiacao SINAC nao existe no RM;
+clients;dt_desfiliacao_sinac;Filiacao SINAC nao existe no RM;
+clients;motivo_desfiliacao_sinac;Filiacao SINAC nao existe no RM;
+clients;obs_sinac;Campo do negocio SINAC sem equivalente no RM;
+clients;dt_aniversario_empresa;Sem equivalente no RM (DTINICATIVIDADES ja mapeada para dt_abertura_empresa);
+clients;dt_autorizacao_consorcio;Autorizacao de consorcio nao existe no RM padrao;Verificar campos opcionais do RM (DATAOP1..3) no reconhecimento
+clients;dt_pedido_consorcio;Pedido de consorcio nao existe no RM padrao;Verificar campos opcionais do RM (DATAOP1..3) no reconhecimento
+clients;status_empresa;Vocabulario proprio do app sem equivalente no RM;Campo status ja recebe ATIVO do RM como 1/0
+clients;responsavel_empresa;Sem equivalente direto no RM;CONTATO do RM ja mapeado para contato_name_admin
+clients;email_ouvidoria;Ouvidoria nao existe no RM;
+clients;telefone_ouvidoria;Ouvidoria nao existe no RM;
+clients;presidente_atual;Dado de governanca nao existe no RM;
+clients;mandato_inicio;Dado de governanca nao existe no RM;
+clients;mandato_termino;Dado de governanca nao existe no RM;
+clients;email_presidente;Dado de governanca nao existe no RM;
+clients;email_secretaria;Dado de governanca nao existe no RM;
+clients;obs_juridico;Campo juridico do app sem equivalente no RM;
+clients;obs_sinac_juridico;Campo juridico do app sem equivalente no RM;
+clients;created_by;Importacao automatica sem usuario logado;FK nullable para users
+clients;updated_by;Importacao automatica sem usuario logado;FK nullable para users
+client_contatos;user_id;Importacao automatica sem usuario logado;FK nullable para users
+client_contatos;celular;FCFOCONTATO nao possui campo de celular;TELEFONE e FAX ja mapeados para telefone e telefone_2
+client_contatos;departamento;FCFOCONTATO nao possui departamento;FUNCAO ja mapeada para funcao
+client_contatos;outro_departamento;FCFOCONTATO nao possui departamento;
+client_contatos;representante_legal;RM nao indica representante legal do contato;Fica null para nao gravar valor incorreto (model casta para boolean)
+client_contatos;comite;Comites sao conceito do app e nao existem no RM;
+client_opcionais;(tabela inteira);Unico campo com fonte seria inicio_atv que duplicaria clients.dt_abertura_empresa;Tabela nao populada pela importacao
+client_socios;(tabela inteira);Socios e administradores nao constam nas 5 tabelas importadas do RM;Existem em outras tabelas do RM fora do escopo atual
+client_juridico_contatos;(tabela inteira);Contatos juridicos sao conceito do app sem equivalente no RM;Tabela nao populada pela importacao
+client_redes_sociais;(tabela inteira);RM nao armazena redes sociais;Tabela nao populada pela importacao
+client_contratos;(tabela inteira);Contratos do app nao existem nas tabelas importadas;Tabela nao populada pela importacao
+client_filiacoes_historico;(tabela inteira);Historico de filiacao e conceito ABAC/SINAC sem equivalente no RM;Tabela nao populada pela importacao
+documents;(tabela inteira);GED do app nao possui documentos vindos do RM;Tabela nao populada pela importacao
+tags;(tabela inteira);Tags sao conceito do app sem equivalente no RM;Tabela nao populada pela importacao

@@ -4,8 +4,8 @@
 <div class="mx-auto max-w-7xl space-y-6">
     <div class="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
         <div>
-            <h1 class="text-2xl font-bold text-slate-900">{{ $client->nome }}</h1>
-            <p class="text-sm text-slate-500">CPF/CNPJ: {{ $client->cpf_cnpj ?: '-' }}</p>
+            <h1 class="text-2xl font-bold text-slate-900">{{ $client->name }}</h1>
+            <p class="text-sm text-slate-500">CPF/CNPJ: {{ $client->document ?: '-' }}</p>
         </div>
 
         <div class="flex flex-wrap gap-2">
@@ -83,34 +83,33 @@
 
                             $fields = [
                                 // === Bloco principal (ordem solicitada) ===
-                                'Nome Fantasia'              => $client->nome_fantasia,
-                                'Razão Social'               => $client->nome,
+                                'Nome Fantasia'              => $client->fantasy_name,
+                                'Razão Social'               => $client->name,
                                 'Associado ABAC'             => $client->associado_abac ? 'Sim' : 'Não',
                                 'Associado SINAC'            => $client->associado_sinac ? 'Sim' : 'Não',
                                 'Categoria'                  => $client->categoria,
                                 'Sub Categoria'              => $client->classificacao,
-                                'CNPJ/CPF'                   => $client->cpf_cnpj,
-                                'Regional'                   => $client->regional,
+                                'CNPJ/CPF'                   => $client->document,
+                                'Regional'                   => $client->regional?->nome,
                                 'Inscrição Estadual'         => $client->inscri_estadual,
                                 'Inscrição Municipal'        => $client->inscri_municipal,
                                 'Status da Empresa'          => $client->status_empresa,
                                 'Responsável pela empresa'   => $client->responsavel_empresa,
-                                'E-mail da empresa'          => $client->email_admin,
-                                'Telefone da empresa'        => $client->telefone,
+                                'E-mail da empresa'          => $client->email,
+                                'Telefone da empresa'        => $client->phone,
                                 'E-mail ouvidoria da empresa'   => $client->email_ouvidoria,
                                 'Telefone ouvidoria da empresa' => $client->telefone_ouvidoria,
 
                                 // === Demais campos (mantidos) ===
                                 'Código Omie'                => $client->cod_omie,
                                 'Tipo Cliente'               => $client->tipo_cliente,
-                                'Celular Admin'              => $client->celular_admin,
+                                'Celular Admin'              => $client->mobile,
                                 'Contato Admin'              => $client->contato_name_admin,
-                                'Associado'                  => $client->associado,
                                 'Situação ABAC'              => $client->situacao_abac,
                                 'Classificação Administradora' => $client->classificao_administradora,
                                 'Data BACEN'                 => $client->dt_bacen ? \Carbon\Carbon::parse($client->dt_bacen)->format('d/m/Y') : null,
                                 'E-mail CONAC'               => $client->email_conac,
-                                'Segmentos'                  => $client->segmentos,
+                                'Segmentos'                  => $client->segmento,
                                 'Área de Atuação'            => $client->area_atuacao,
                                 'E-mail 2'                   => $client->email_2,
                                 'E-mail 3'                   => $client->email_3,
@@ -296,7 +295,7 @@
 
                                             <div class="rounded-xl border border-slate-200 p-4">
                                                 <label class="mb-1 block text-sm font-semibold text-slate-700">Observações</label>
-                                                <textarea name="obs" rows="4" class="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm">{{ $client->obs }}</textarea>
+                                                <textarea name="notes" rows="4" class="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm">{{ $client->notes }}</textarea>
                                             </div>
                                         </div>
 

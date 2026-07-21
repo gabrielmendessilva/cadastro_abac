@@ -5,7 +5,7 @@
         <div class="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
             <div>
                 <h1 class="text-2xl font-bold text-slate-900">Editar cliente</h1>
-                <p class="text-sm text-slate-500">{{ $client->nome }}</p>
+                <p class="text-sm text-slate-500">{{ $client->name }}</p>
             </div>
 
             <div class="flex gap-2">
@@ -47,11 +47,11 @@
                     </div>
                     <div>
                         <label class="mb-1 block text-sm font-medium text-slate-700">Nome Fantasia</label>
-                        <input type="text" name="nome_fantasia" value="{{ old('nome_fantasia', $client->nome_fantasia) }}" class="w-full rounded-xl border border-slate-300 px-4 py-2.5 text-sm">
+                        <input type="text" name="fantasy_name" value="{{ old('fantasy_name', $client->fantasy_name) }}" class="w-full rounded-xl border border-slate-300 px-4 py-2.5 text-sm">
                     </div>
                     <div class="md:col-span-2">
                         <label class="mb-1 block text-sm font-medium text-slate-700">Nome / Razão Social</label>
-                        <input type="text" name="nome" value="{{ old('nome', $client->nome) }}" class="w-full rounded-xl border border-slate-300 px-4 py-2.5 text-sm">
+                        <input type="text" name="name" value="{{ old('name', $client->name) }}" class="w-full rounded-xl border border-slate-300 px-4 py-2.5 text-sm">
                     </div>
                     <div>
                         <label class="mb-1 block text-sm font-medium text-slate-700">Nome Comercial</label>
@@ -71,7 +71,7 @@
                     </div>
                     <div>
                         <label class="mb-1 block text-sm font-medium text-slate-700">CNPJ / CPF</label>
-                        <input type="text" name="cpf_cnpj" value="{{ old('cpf_cnpj', $client->cpf_cnpj) }}" class="w-full rounded-xl border border-slate-300 px-4 py-2.5 text-sm">
+                        <input type="text" name="document" value="{{ old('document', $client->document) }}" required class="w-full rounded-xl border border-slate-300 px-4 py-2.5 text-sm">
                     </div>
                     <div>
                         <label class="mb-1 block text-sm font-medium text-slate-700">CPF (PF)</label>
@@ -87,7 +87,12 @@
                     </div>
                     <div>
                         <label class="mb-1 block text-sm font-medium text-slate-700">Regional</label>
-                        <input type="text" name="regional" value="{{ old('regional', $client->regional) }}" class="w-full rounded-xl border border-slate-300 px-4 py-2.5 text-sm">
+                        <select name="regional_id" class="w-full rounded-xl border border-slate-300 px-4 py-2.5 text-sm">
+                            <option value="">—</option>
+                            @foreach ($regionais as $regional)
+                                <option value="{{ $regional->id }}" @selected(old('regional_id', $client->regional_id) == $regional->id)>{{ $regional->nome }}</option>
+                            @endforeach
+                        </select>
                     </div>
                     <div>
                         <label class="mb-1 block text-sm font-medium text-slate-700">Inscrição Estadual</label>
@@ -149,10 +154,6 @@
                             Classificação Administradora <span class="ml-1 text-xs text-slate-400" title="Definição pendente — confirmar com o cliente.">ⓘ</span>
                         </label>
                         <input type="text" name="classificao_administradora" value="{{ old('classificao_administradora', $client->classificao_administradora) }}" placeholder="(definir com o cliente)" class="w-full rounded-xl border border-slate-300 px-4 py-2.5 text-sm">
-                    </div>
-                    <div>
-                        <label class="mb-1 block text-sm font-medium text-slate-700">Associado</label>
-                        <input type="text" name="associado" value="{{ old('associado', $client->associado) }}" class="w-full rounded-xl border border-slate-300 px-4 py-2.5 text-sm">
                     </div>
                 </div>
             </div>
@@ -225,15 +226,15 @@
                     </div>
                     <div>
                         <label class="mb-1 block text-sm font-medium text-slate-700">Telefone</label>
-                        <input type="text" name="telefone" value="{{ old('telefone', $client->telefone) }}" class="w-full rounded-xl border border-slate-300 px-4 py-2.5 text-sm">
+                        <input type="text" name="phone" value="{{ old('phone', $client->phone) }}" class="w-full rounded-xl border border-slate-300 px-4 py-2.5 text-sm">
                     </div>
                     <div>
                         <label class="mb-1 block text-sm font-medium text-slate-700">Celular Admin</label>
-                        <input type="text" name="celular_admin" value="{{ old('celular_admin', $client->celular_admin) }}" class="w-full rounded-xl border border-slate-300 px-4 py-2.5 text-sm">
+                        <input type="text" name="mobile" value="{{ old('mobile', $client->mobile) }}" class="w-full rounded-xl border border-slate-300 px-4 py-2.5 text-sm">
                     </div>
                     <div class="md:col-span-2">
                         <label class="mb-1 block text-sm font-medium text-slate-700">E-mail da empresa</label>
-                        <input type="text" name="email_admin" value="{{ old('email_admin', $client->email_admin) }}" class="w-full rounded-xl border border-slate-300 px-4 py-2.5 text-sm">
+                        <input type="text" name="email" value="{{ old('email', $client->email) }}" class="w-full rounded-xl border border-slate-300 px-4 py-2.5 text-sm">
                     </div>
                     <div class="md:col-span-2">
                         <label class="mb-1 block text-sm font-medium text-slate-700">Contato Admin</label>
@@ -339,10 +340,6 @@
                         <input type="text" name="area_atuacao" value="{{ old('area_atuacao', $client->area_atuacao) }}" class="w-full rounded-xl border border-slate-300 px-4 py-2.5 text-sm">
                     </div>
                     <div class="md:col-span-2">
-                        <label class="mb-1 block text-sm font-medium text-slate-700">Segmentos (texto livre — legacy)</label>
-                        <input type="text" name="segmentos" value="{{ old('segmentos', $client->segmentos) }}" class="w-full rounded-xl border border-slate-300 px-4 py-2.5 text-sm">
-                    </div>
-                    <div class="md:col-span-2">
                         <label class="mb-1 block text-sm font-medium text-slate-700">Observação (cadastro)</label>
                         <textarea name="obs_cadastro" rows="3" class="w-full rounded-xl border border-slate-300 px-4 py-2.5 text-sm">{{ old('obs_cadastro', $client->obs_cadastro) }}</textarea>
                     </div>
@@ -364,7 +361,7 @@
                     </label>
                     <div>
                         <label class="mb-1 block text-sm font-medium text-slate-700">Observação 1</label>
-                        <textarea name="obs" rows="3" class="w-full rounded-xl border border-slate-300 px-4 py-2.5 text-sm">{{ old('obs', $client->obs) }}</textarea>
+                        <textarea name="notes" rows="3" class="w-full rounded-xl border border-slate-300 px-4 py-2.5 text-sm">{{ old('notes', $client->notes) }}</textarea>
                     </div>
                     <div>
                         <label class="mb-1 block text-sm font-medium text-slate-700">Observação 2</label>

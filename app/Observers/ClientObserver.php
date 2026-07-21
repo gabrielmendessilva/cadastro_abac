@@ -9,10 +9,10 @@ class ClientObserver
 {
     private const ABA_POR_CAMPO = [
         // GERAL
-        'cod_omie' => 'geral', 'nome_fantasia' => 'geral', 'nome' => 'geral', 'nome_comercial' => 'geral',
+        'cod_omie' => 'geral', 'fantasy_name' => 'geral', 'name' => 'geral', 'nome_comercial' => 'geral',
         'possui_outro_nome' => 'geral', 'outros_nomes' => 'geral',
-        'classificacao' => 'geral', 'categoria' => 'geral', 'cpf_cnpj' => 'geral', 'cpf' => 'geral',
-        'rg' => 'geral', 'dt_nascimento' => 'geral', 'regional' => 'geral',
+        'classificacao' => 'geral', 'categoria' => 'geral', 'document' => 'geral', 'cpf' => 'geral',
+        'rg' => 'geral', 'dt_nascimento' => 'geral', 'regional_id' => 'geral',
         'inscri_estadual' => 'geral', 'inscri_municipal' => 'geral', 'tipo_cliente' => 'geral',
         'autenticacao_whatsapp' => 'geral', 'status' => 'geral', 'status_empresa' => 'geral',
         'associado_abac' => 'geral', 'dt_filiacao_abac' => 'geral', 'num_filiacao_abac' => 'geral',
@@ -21,14 +21,14 @@ class ClientObserver
         'dt_desfiliacao_sinac' => 'geral', 'motivo_desfiliacao_sinac' => 'geral', 'obs_sinac' => 'geral',
         'dt_abertura_empresa' => 'geral', 'dt_aniversario_empresa' => 'geral',
         'dt_autorizacao_consorcio' => 'geral', 'dt_pedido_consorcio' => 'geral', 'dt_bacen' => 'geral',
-        'situacao_abac' => 'geral', 'classificao_administradora' => 'geral', 'associado' => 'geral',
-        'responsavel_empresa' => 'geral', 'email_admin' => 'geral', 'contato_name_admin' => 'geral',
-        'email_conac' => 'geral', 'celular_admin' => 'geral', 'telefone' => 'geral',
+        'situacao_abac' => 'geral', 'classificao_administradora' => 'geral',
+        'responsavel_empresa' => 'geral', 'email' => 'geral', 'contato_name_admin' => 'geral',
+        'email_conac' => 'geral', 'mobile' => 'geral', 'phone' => 'geral',
         'email_ouvidoria' => 'geral', 'telefone_ouvidoria' => 'geral',
-        'segmentos' => 'geral', 'area_atuacao' => 'geral',
+        'area_atuacao' => 'geral',
         'email_2' => 'geral', 'email_3' => 'geral', 'email_4' => 'geral',
         'email_5' => 'geral', 'email_6' => 'geral', 'email_7' => 'geral',
-        'obs' => 'geral', 'obs_2' => 'geral',
+        'notes' => 'geral', 'obs_2' => 'geral',
         // FINANCEIRO
         'emails_boletos' => 'financeiro', 'possui_contrato_ativo' => 'financeiro',
         // SECRETARIA

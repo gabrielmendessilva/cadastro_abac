@@ -2,10 +2,13 @@
 
 namespace App\Http\Requests;
 
+use App\Http\Requests\Concerns\NormalizaDocumento;
 use Illuminate\Foundation\Http\FormRequest;
 
 class StoreClientRequest extends FormRequest
 {
+    use NormalizaDocumento;
+
     public function authorize(): bool
     {
         return true;
@@ -15,19 +18,20 @@ class StoreClientRequest extends FormRequest
     {
         return [
             // Identificação (mínimo: nome)
-            'cod_omie' => ['nullable', 'string', 'max:50'],
-            'nome' => ['required', 'string', 'max:255'],
-            'nome_fantasia' => ['nullable', 'string', 'max:255'],
+            'cod_omie' => ['nullable', 'integer', 'min:0'],
+            'name' => ['required', 'string', 'max:255'],
+            'fantasy_name' => ['nullable', 'string', 'max:255'],
             'nome_comercial' => ['nullable', 'string', 'max:255'],
             'possui_outro_nome' => ['nullable', 'boolean'],
             'outros_nomes' => ['nullable', 'string'],
             'classificacao' => ['nullable', 'string', 'max:100'],
             'categoria' => ['nullable', 'string', 'max:100'],
-            'cpf_cnpj' => ['nullable', 'string', 'max:20'],
+            // A coluna é NOT NULL + UNIQUE: deixar passar vazio derrubaria o INSERT com 500.
+            'document' => ['required', 'string', 'max:20', 'unique:clients,document'],
             'cpf' => ['nullable', 'string', 'max:20'],
             'rg' => ['nullable', 'string', 'max:30'],
             'dt_nascimento' => ['nullable', 'date'],
-            'regional' => ['nullable', 'string', 'max:100'],
+            'regional_id' => ['nullable', 'integer', 'exists:regionais,id'],
             'inscri_estadual' => ['nullable', 'string', 'max:50'],
             'inscri_municipal' => ['nullable', 'string', 'max:50'],
             'tipo_cliente' => ['nullable', 'string', 'max:50'],
@@ -58,19 +62,17 @@ class StoreClientRequest extends FormRequest
             'status_empresa' => ['nullable', 'string', 'max:50'],
             'situacao_abac' => ['nullable', 'string', 'max:100'],
             'classificao_administradora' => ['nullable', 'string', 'max:100'],
-            'associado' => ['nullable', 'string', 'max:50'],
 
             // Contatos
             'responsavel_empresa' => ['nullable', 'string', 'max:255'],
-            'email_admin' => ['nullable', 'string', 'max:255'],
+            'email' => ['nullable', 'string', 'max:255'],
             'contato_name_admin' => ['nullable', 'string', 'max:255'],
             'email_conac' => ['nullable', 'string', 'max:255'],
-            'celular_admin' => ['nullable', 'string', 'max:30'],
-            'telefone' => ['nullable', 'string', 'max:30'],
+            'mobile' => ['nullable', 'string', 'max:30'],
+            'phone' => ['nullable', 'string', 'max:30'],
             'email_ouvidoria' => ['nullable', 'string', 'max:255'],
             'telefone_ouvidoria' => ['nullable', 'string', 'max:30'],
 
-            'segmentos' => ['nullable', 'string'],
             'area_atuacao' => ['nullable', 'string'],
             'email_2' => ['nullable', 'string', 'max:255'],
             'email_3' => ['nullable', 'string', 'max:255'],
@@ -99,7 +101,7 @@ class StoreClientRequest extends FormRequest
             'obs_juridico' => ['nullable', 'string'],
             'obs_sinac_juridico' => ['nullable', 'string'],
 
-            'obs' => ['nullable', 'string'],
+            'notes' => ['nullable', 'string'],
             'obs_2' => ['nullable', 'string'],
             'status' => ['nullable', 'boolean'],
         ];
@@ -120,5 +122,7 @@ class StoreClientRequest extends FormRequest
         if ($merge) {
             $this->merge($merge);
         }
+
+        $this->normalizarDocumento();
     }
 }

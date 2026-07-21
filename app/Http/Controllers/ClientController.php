@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Http\Requests\StoreClientRequest;
 use App\Http\Requests\UpdateClientRequest;
 use App\Models\Client;
+use App\Models\Lista\Regional;
 use Illuminate\Http\Request;
 
 class ClientController extends Controller
@@ -20,12 +21,12 @@ class ClientController extends Controller
                 $search = (string) $request->string('search');
 
                 $query->where(function ($subQuery) use ($search) {
-                    $subQuery->where('nome', 'like', "%{$search}%")
-                        ->orWhere('nome_fantasia', 'like', "%{$search}%")
+                    $subQuery->where('name', 'like', "%{$search}%")
+                        ->orWhere('fantasy_name', 'like', "%{$search}%")
                         ->orWhere('nome_comercial', 'like', "%{$search}%")
-                        ->orWhere('cpf_cnpj', 'like', "%{$search}%")
+                        ->orWhere('document', 'like', "%{$search}%")
                         ->orWhere('cpf', 'like', "%{$search}%")
-                        ->orWhere('email_admin', 'like', "%{$search}%")
+                        ->orWhere('email', 'like', "%{$search}%")
                         ->orWhere('cod_omie', 'like', "%{$search}%");
                 });
             })
@@ -45,7 +46,13 @@ class ClientController extends Controller
     {
         abort_unless(auth()->user()->can('clients.create'), 403);
 
-        return view('clients.create');
+        return view('clients.create', ['regionais' => $this->regionais()]);
+    }
+
+    /** Lista de domínio que alimenta o select de regional nos formulários. */
+    private function regionais()
+    {
+        return Regional::query()->where('ativo', true)->orderBy('nome')->get();
     }
 
     public function store(StoreClientRequest $request)
@@ -158,6 +165,7 @@ class ClientController extends Controller
             ->withQueryString();
     
         $client->load([
+            'regional',
             'filiacoesHistorico',
             'redesSociais',
             'contratos',
@@ -196,7 +204,10 @@ class ClientController extends Controller
     {
         abort_unless(auth()->user()->can('clients.edit'), 403);
 
-        return view('clients.edit', compact('client'));
+        return view('clients.edit', [
+            'client' => $client,
+            'regionais' => $this->regionais(),
+        ]);
     }
 
     public function update(UpdateClientRequest $request, Client $client)

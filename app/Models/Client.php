@@ -41,6 +41,11 @@ class Client extends Model
         return $this->hasMany(Document::class);
     }
 
+    public function regional()
+    {
+        return $this->belongsTo(Lista\Regional::class, 'regional_id');
+    }
+
     public function creator()
     {
         return $this->belongsTo(User::class, 'created_by');
@@ -104,5 +109,10 @@ class Client extends Model
     public function auditLogs()
     {
         return $this->hasMany(ClientAuditLog::class);
+    }
+
+    public function centrosCusto()
+    {
+        return $this->hasMany(CentroCusto::class, 'client_id');
     }
 }

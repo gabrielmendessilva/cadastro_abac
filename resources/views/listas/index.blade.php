@@ -67,7 +67,7 @@
                                     @foreach ($mandatos as $m)
                                         @php $dias = (int) now()->diffInDays(\Carbon\Carbon::parse($m->mandato_termino), false); @endphp
                                         <tr>
-                                            <td class="px-3 py-2"><a href="{{ route('clients.show', ['client' => $m->id, 'tab' => 'secretaria']) }}" class="text-blue-600 hover:underline">{{ $m->nome }}</a></td>
+                                            <td class="px-3 py-2"><a href="{{ route('clients.show', ['client' => $m->id, 'tab' => 'secretaria']) }}" class="text-blue-600 hover:underline">{{ $m->name }}</a></td>
                                             <td class="px-3 py-2">{{ $m->presidente_atual ?: '-' }}</td>
                                             <td class="px-3 py-2">{{ \Carbon\Carbon::parse($m->mandato_inicio)->format('d/m/Y') }}</td>
                                             <td class="px-3 py-2">{{ \Carbon\Carbon::parse($m->mandato_termino)->format('d/m/Y') }}</td>
@@ -105,7 +105,7 @@
                                     @foreach ($integrantesComites as $c)
                                         <tr>
                                             <td class="px-3 py-2 font-medium">{{ $c->comite_nome }}</td>
-                                            <td class="px-3 py-2">{{ $c->client?->nome ?: '-' }}</td>
+                                            <td class="px-3 py-2">{{ $c->client?->name ?: '-' }}</td>
                                             <td class="px-3 py-2">{{ $c->contato?->nome ?: '-' }} <span class="text-xs text-slate-400">{{ $c->contato?->email ?: '' }}</span></td>
                                             <td class="px-3 py-2">
                                                 <span class="rounded-full bg-purple-100 px-2 py-0.5 text-xs text-purple-700">{{ \App\Models\ClientComite::PAPEIS[$c->papel] }}</span>

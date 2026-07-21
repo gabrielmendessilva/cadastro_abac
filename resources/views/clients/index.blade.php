@@ -46,10 +46,10 @@
                     @php $endereco = $client->enderecos->first(); @endphp
                     <tr class="border-b border-slate-100">
                         <td class="py-4 pr-4">
-                            <div class="font-medium">{{ $client->nome ?: $client->nome_fantasia ?: '-' }}</div>
-                            <div class="text-xs text-slate-500">{{ $client->email_admin ?: '-' }}</div>
+                            <div class="font-medium">{{ $client->name ?: $client->fantasy_name ?: '-' }}</div>
+                            <div class="text-xs text-slate-500">{{ $client->email ?: '-' }}</div>
                         </td>
-                        <td class="py-4 pr-4">{{ $client->cpf_cnpj ?: '-' }}</td>
+                        <td class="py-4 pr-4">{{ $client->document ?: '-' }}</td>
                         <td class="py-4 pr-4">{{ trim(($endereco?->municipio ?: '-') . ' / ' . ($endereco?->estado ?: '-')) }}</td>
                         <td class="py-4 pr-4">{{ $client->documents_count }}</td>
                         <td class="py-4 pr-4">{{ $client->status ? 'Ativo' : 'Inativo' }}</td>

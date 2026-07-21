@@ -7,6 +7,13 @@ use Illuminate\Support\Facades\Schema;
 return new class extends Migration {
     public function up(): void
     {
+        // Esta migration é MySQL-only (ALTER ... MODIFY / SHOW CREATE TABLE).
+        // Em sqlite (suíte de testes) vira no-op: as migrations que criam
+        // client_contatos já declaram os tipos corretos via Blueprint.
+        if (DB::connection()->getDriverName() !== 'mysql') {
+            return;
+        }
+
         // Padroniza int(11) → bigint(20) unsigned para alinhar com clients.id e users.id
         DB::statement('ALTER TABLE client_contatos MODIFY client_id BIGINT(20) UNSIGNED NOT NULL');
         DB::statement('ALTER TABLE client_contatos MODIFY user_id BIGINT(20) UNSIGNED NULL');
@@ -26,6 +33,10 @@ return new class extends Migration {
 
     public function down(): void
     {
+        if (DB::connection()->getDriverName() !== 'mysql') {
+            return;
+        }
+
         $existingFks = collect(DB::select("SHOW CREATE TABLE client_contatos"))
             ->first()->{'Create Table'} ?? '';
 

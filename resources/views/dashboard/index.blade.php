@@ -35,8 +35,8 @@
                 <a href="{{ route('clients.show', ['client' => $client, 'tab' => 'geral']) }}"
                    class="block rounded-2xl border border-slate-200 p-4 flex justify-between items-center hover:bg-slate-50">
                     <div class="min-w-0">
-                        <p class="font-medium truncate">{{ $client->nome ?: $client->nome_fantasia ?: '—' }}</p>
-                        <p class="text-sm text-slate-500">{{ $client->cpf_cnpj ?: '-' }}</p>
+                        <p class="font-medium truncate">{{ $client->name ?: $client->fantasy_name ?: '—' }}</p>
+                        <p class="text-sm text-slate-500">{{ $client->document ?: '-' }}</p>
                     </div>
                     <span class="text-sm shrink-0 ml-3 {{ $client->status ? 'text-emerald-600' : 'text-slate-500' }}">{{ $client->status ? 'Ativo' : 'Inativo' }}</span>
                 </a>
@@ -57,7 +57,7 @@
             @forelse($latestDocuments as $document)
                 <div class="rounded-2xl border border-slate-200 p-4">
                     <p class="font-medium">{{ $document->title }}</p>
-                    <p class="text-sm text-slate-500">Cliente: {{ $document->client->nome ?? '-' }}</p>
+                    <p class="text-sm text-slate-500">Cliente: {{ $document->client->name ?? '-' }}</p>
                 </div>
             @empty
                 <p class="text-slate-500">Nenhum documento enviado.</p>

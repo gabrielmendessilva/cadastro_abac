@@ -116,13 +116,13 @@ class ListaController extends Controller
             ->where('mandato_alerta', true)
             ->where('mandato_termino', '<=', now()->addMonths(3))
             ->orderBy('mandato_termino')
-            ->get(['id', 'nome', 'presidente_atual', 'mandato_inicio', 'mandato_termino']);
+            ->get(['id', 'name', 'presidente_atual', 'mandato_inicio', 'mandato_termino']);
     }
 
     private function integrantesComites()
     {
         return ClientComite::query()
-            ->with(['client:id,nome', 'contato:id,nome,email'])
+            ->with(['client:id,name', 'contato:id,nome,email'])
             ->orderBy('comite_nome')
             ->get();
     }

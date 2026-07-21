@@ -95,9 +95,28 @@ return [
         // Uso: Log::channel('omie')->info('create.ok', ['omie_id' => 123]);
         'omie' => [
             'driver' => 'daily',
-            'path'   => storage_path('logs/omie.log'),
-            'level'  => env('LOG_LEVEL', 'info'),
-            'days'   => 14,
+            'path' => storage_path('logs/omie.log'),
+            'level' => env('LOG_LEVEL', 'info'),
+            'days' => 14,
+            'replace_placeholders' => true,
+        ],
+
+        // Canal dedicado à importação TOTVS RM (rm:import).
+        // Retenção maior que o omie: é a trilha de auditoria do que foi criado/pulado na carga.
+        'rm' => [
+            'driver' => 'daily',
+            'path' => storage_path('logs/rm.log'),
+            'level' => env('LOG_LEVEL', 'info'),
+            'days' => 30,
+            'replace_placeholders' => true,
+        ],
+
+        // Canal dedicado à migração do banco legado abac_admin (abac-admin:import).
+        'abac_admin' => [
+            'driver' => 'daily',
+            'path' => storage_path('logs/abac_admin.log'),
+            'level' => env('LOG_LEVEL', 'info'),
+            'days' => 30,
             'replace_placeholders' => true,
         ],
 

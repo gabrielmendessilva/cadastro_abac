@@ -36,7 +36,8 @@
       "Bash(python3 -c \"import json,sys; d=json.load\\(sys.stdin\\); [print\\(t['path']\\) for t in d.get\\('tree',[]\\)]\")",
       "Bash(grep -rhoE '\\\\$client->[a-zA-Z0-9_]+' resources/views)",
       "Bash(curl -s \"https://raw.githubusercontent.com/vitorgt/TOTVS-RM-SQL/main/dados/tabelas_2402_105.json\" -o /private/tmp/claude-501/-Users-gabrielmendes-Desktop-laravel-ged-crud/665fd979-ba80-4249-a095-3bf5d499baf6/scratchpad/tabelas_rm.json)",
-      "Bash(python3 -c ' *)"
+      "Bash(python3 -c ' *)",
+      "Bash(php -r ' *)"
     ]
   }
 }
