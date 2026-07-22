@@ -37,7 +37,18 @@
       "Bash(grep -rhoE '\\\\$client->[a-zA-Z0-9_]+' resources/views)",
       "Bash(curl -s \"https://raw.githubusercontent.com/vitorgt/TOTVS-RM-SQL/main/dados/tabelas_2402_105.json\" -o /private/tmp/claude-501/-Users-gabrielmendes-Desktop-laravel-ged-crud/665fd979-ba80-4249-a095-3bf5d499baf6/scratchpad/tabelas_rm.json)",
       "Bash(python3 -c ' *)",
-      "Bash(php -r ' *)"
+      "Bash(php -r ' *)",
+      "Bash(git -C /Users/gabrielmendes/Desktop/laravel-ged-crud status --short)",
+      "Bash(git -C /Users/gabrielmendes/Desktop/laravel-ged-crud diff config/database.php)",
+      "Bash(grep -rn '$connection\\\\|DB::connection\\\\|on\\(' /Users/gabrielmendes/Desktop/laravel-ged-crud/app/Services /Users/gabrielmendes/Desktop/laravel-ged-crud/app/Models /Users/gabrielmendes/Desktop/laravel-ged-crud/app/Console)",
+      "Bash(git -C /Users/gabrielmendes/Desktop/laravel-ged-crud log --all --oneline -S \"customLog\")",
+      "Bash(git -C /Users/gabrielmendes/Desktop/laravel-ged-crud log --all --oneline -S \"wp_usermeta\")",
+      "Bash(git -C /Users/gabrielmendes/Desktop/laravel-ged-crud log --all --oneline -S \"pgsql-associado\")",
+      "Bash(git -C /Users/gabrielmendes/Desktop/laravel-ged-crud stash list)",
+      "Bash(git -C /Users/gabrielmendes/Desktop/laravel-ged-crud grep -n \"customLog\" 99fad7a --)",
+      "Bash(git -C /Users/gabrielmendes/Desktop/laravel-ged-crud grep -l \"customLog\" 99fad7a)",
+      "Bash(git -C /Users/gabrielmendes/Desktop/laravel-ged-crud grep -l \"customLog\" 3352d3f)",
+      "Bash(git -C /Users/gabrielmendes/Desktop/laravel-ged-crud log --all --oneline)"
     ]
   }
 }

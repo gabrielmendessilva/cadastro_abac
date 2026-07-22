@@ -115,6 +115,28 @@ return [
             // 'encrypt' => env('DB_ENCRYPT', 'yes'),
             // 'trust_server_certificate' => env('DB_TRUST_SERVER_CERTIFICATE', 'false'),
         ],
+        // Banco MySQL do WordPress dos associados — usado pelo associados:sync.
+        // Host/porta caem no DB_HOST/DB_PORT do app quando não há var dedicada
+        // (na Hostinger os dois bancos vivem no mesmo servidor MySQL).
+        'pgsql-associado' => [
+            'driver' => 'mysql',
+            'host' => env('DB_HOST_ASS', env('DB_HOST', '127.0.0.1')),
+            'port' => env('DB_PORT_ASS', env('DB_PORT', '3306')),
+            'database' => env('DB_DATABASE_ASS', 'forge'),
+            'username' => env('DB_USERNAME_ASS', 'forge'),
+            'password' => env('DB_PASSWORD_ASS', ''),
+            'charset' => 'utf8mb4',
+            'collation' => 'utf8mb4_unicode_ci',
+            'prefix' => '',
+            'prefix_indexes' => true,
+            'strict' => true,
+            'engine' => null,
+            'options' => extension_loaded('pdo_mysql') ? array_filter([
+                (PHP_VERSION_ID >= 80500 ? Mysql::ATTR_SSL_CA : PDO::MYSQL_ATTR_SSL_CA) => env('MYSQL_ATTR_SSL_CA'),
+                // Banco remoto: não deixar o sync pendurado se o host não responder.
+                PDO::ATTR_TIMEOUT => (int) env('DB_TIMEOUT_ASS', 10),
+            ]) : [],
+        ],
 
         // Banco MySQL do sistema legado abac_admin — usado para puxar dados pontuais.
         'abac_admin' => [

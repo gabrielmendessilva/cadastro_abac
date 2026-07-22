@@ -120,6 +120,15 @@ return [
             'replace_placeholders' => true,
         ],
 
+        // Canal dedicado à sincronização do WordPress dos associados (associados:sync).
+        'associados' => [
+            'driver' => 'daily',
+            'path' => storage_path('logs/associados.log'),
+            'level' => env('LOG_LEVEL', 'info'),
+            'days' => 30,
+            'replace_placeholders' => true,
+        ],
+
     ],
 
 ];
