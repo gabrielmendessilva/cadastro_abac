@@ -22,7 +22,7 @@ class RmImport extends Command
         {--limit= : Processa no máximo N registros FCFO}
         {--coligada= : Restringe a uma coligada do RM}
         {--chunk= : Tamanho do chunk de leitura (default: config rm.import.chunk)}
-        {--no-backfill : Não preencher centro_custo_id em clients já existentes}';
+        {--no-backfill : Não completar clients já existentes (centro de custo, site e campos opcionais do RM)}';
 
     protected $description = 'Importa clientes/fornecedores, contatos e centros de custo do TOTVS RM (SQL Server)';
 

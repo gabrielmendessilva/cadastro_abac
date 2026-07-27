@@ -6,6 +6,7 @@ use App\Models\CentroCusto;
 use App\Models\Client;
 use App\Models\ClientContato;
 use App\Models\ClientEndereco;
+use App\Models\ClientRedeSocial;
 use App\Services\Rm\Contracts\RmReaderInterface;
 use App\Services\Rm\Support\Normalizer;
 use Illuminate\Support\Facades\DB;
@@ -24,6 +25,14 @@ use Throwable;
  * - Centro de custo (GCCUSTO via FCFODEF) vira linha em centros_custo vinculada
  *   por client_id — tabela satélite, sem nenhuma coluna de referência ao RM.
  *   Coligada/código do RM são usados apenas em memória para resolver o join.
+ * - `associado_abac` NUNCA é escrito por esta carga: quem é associado vem do
+ *   legado (clients:backfill-legado) e do WordPress (associados:sync). O RM tem
+ *   cli/for que não são associados da ABAC e sobrescrever isso apagaria a base.
+ * - Campos livres da aba "Opcionais" do RM (CAMPOALFAOP1..3 / DATAOP1..3) são a
+ *   única fonte de filiação ABAC/SINAC, data de abertura e site. Diferente do
+ *   resto do cadastro, eles TAMBÉM entram em clientes já existentes (backfill),
+ *   mas só onde a coluna de destino está vazia — o que foi digitado no app nunca
+ *   é sobrescrito pelo RM.
  * - Idempotente: re-executar não duplica nada.
  */
 class RmImportService
@@ -37,6 +46,13 @@ class RmImportService
     /** Colunas de e-mail do cadastro do cliente, na ordem de preenchimento. */
     private const CLIENT_EMAIL_COLUMNS = ['email', 'email_2', 'email_3', 'email_4', 'email_5', 'email_6', 'email_7'];
 
+    /** Colunas de clients alimentadas pelos campos opcionais da FCFO. */
+    private const CLIENT_OPCIONAIS_COLUMNS = [
+        'num_filiacao_abac', 'dt_filiacao_abac',
+        'num_filiacao_sinac', 'dt_filiacao_sinac',
+        'dt_abertura_empresa',
+    ];
+
     /** @var array<int|string,array{emails:array<string,true>,names:array<string,true>}> */
     private array $contactKeys = [];
 
@@ -48,6 +64,12 @@ class RmImportService
 
     /** @var array<string,true> "clientId|codigo" => centro de custo já existente/criado */
     private array $ccExisting = [];
+
+    /** @var array<int,array<string,mixed>> clients.id => valor atual das colunas de CLIENT_OPCIONAIS_COLUMNS */
+    private array $opcionaisAtuais = [];
+
+    /** @var array<int,true> clients.id que já têm rede social do tipo 'site' */
+    private array $siteExistente = [];
 
     private int $fakeId = 0;
 
@@ -137,6 +159,8 @@ class RmImportService
         $this->rmSeenDigits = [];
         $this->ccDetails = [];
         $this->ccExisting = [];
+        $this->opcionaisAtuais = [];
+        $this->siteExistente = [];
         $this->fakeId = 0;
     }
 
@@ -183,13 +207,22 @@ class RmImportService
                 $report->clientsPuladosExistentes++;
             }
 
-            // Cliente existente não é alterado; o centro de custo é linha nova
-            // em tabela satélite, criada só se ainda não existir para ele.
+            // O cadastro do cliente existente não é reescrito: o centro de custo e
+            // o site são linhas novas em tabelas satélite, e os campos opcionais
+            // só entram nas colunas que ainda estão vazias.
             if ($options->backfill) {
                 $cc = $this->resolveCentroCusto($fcfo, $defRows, $report);
 
                 if ($cc !== null && $this->attachCentroCusto($clientId, $cc, $options)) {
                     $report->backfillCentroCusto++;
+                }
+
+                $this->backfillOpcionais($clientId, $fcfo, $options, $report);
+
+                $site = $this->resolveSite($fcfo, $report);
+
+                if ($site !== null && $this->attachSite($clientId, $site, $options)) {
+                    $report->redesSociaisCriadas++;
                 }
             }
         } else {
@@ -217,11 +250,12 @@ class RmImportService
         $cc = $this->resolveCentroCusto($fcfo, $defRows, $report);
         $attrs = $this->buildClientAttributes($fcfo, $digits, $report);
         $enderecos = $this->buildEnderecos($fcfo);
+        $site = $this->resolveSite($fcfo, $report);
 
         if ($options->dryRun) {
             $clientId = --$this->fakeId;
         } else {
-            $clientId = DB::transaction(function () use ($attrs, $enderecos, $cc): int {
+            $clientId = DB::transaction(function () use ($attrs, $enderecos, $cc, $site): int {
                 $client = Client::create($attrs);
 
                 foreach ($enderecos as $endereco) {
@@ -230,6 +264,10 @@ class RmImportService
 
                 if ($cc !== null) {
                     CentroCusto::create($cc + ['client_id' => $client->id]);
+                }
+
+                if ($site !== null) {
+                    ClientRedeSocial::create($site + ['client_id' => $client->id]);
                 }
 
                 return (int) $client->id;
@@ -244,7 +282,19 @@ class RmImportService
             $this->ccExisting[$clientId . '|' . $cc['codigo']] = true;
         }
 
+        if ($site !== null) {
+            $report->redesSociaisCriadas++;
+            $this->siteExistente[$clientId] = true;
+        }
+
         $this->byDigits[$digits] = $clientId;
+
+        // Duplicado do mesmo documento mais adiante no RM cai no caminho de
+        // backfill: semeia o que já foi gravado para ele só completar buracos.
+        $this->opcionaisAtuais[$clientId] = array_intersect_key(
+            $attrs,
+            array_flip(self::CLIENT_OPCIONAIS_COLUMNS),
+        );
 
         // Semeia o dedup de contatos com os e-mails do próprio cliente recém-criado.
         $emails = [];
@@ -354,7 +404,6 @@ class RmImportService
             'email_6' => $emails[5] ?? null,
             'email_7' => $emails[6] ?? null,
             'emails_boletos' => $emailsBoletos !== [] ? implode('; ', $emailsBoletos) : null,
-            'dt_abertura_empresa' => Normalizer::toDateOrNull($fcfo['DTINICATIVIDADES'] ?? null),
             'area_atuacao' => Normalizer::trimOrNull((string) ($fcfo['RAMOATIV'] ?? '')),
             'notes' => Normalizer::trimOrNull((string) ($fcfo['CAMPOLIVRE'] ?? '')),
             'obs_cadastro' => sprintf(
@@ -363,7 +412,7 @@ class RmImportService
                 $fcfo['CODCOLIGADA'] ?? '?',
                 trim((string) ($fcfo['CODCFO'] ?? '?')),
             ),
-        ];
+        ] + $this->buildOpcionais($fcfo);
 
         // clients.status é tinyint(1) NOT NULL default 1: grava booleano de verdade e,
         // quando o RM não informa ATIVO, deixa o default do banco valer.
@@ -380,6 +429,126 @@ class RmImportService
         }
 
         return $attrs;
+    }
+
+    /**
+     * Campos livres da aba "Opcionais" do RM, como a ABAC os usa:
+     * CAMPOALFAOP2/DATAOP2 = filiação ABAC, CAMPOALFAOP3/DATAOP3 = filiação SINAC
+     * e DATAOP1 = data de abertura da empresa.
+     *
+     * @param array<string,mixed> $fcfo
+     * @return array<string,string|null> colunas de CLIENT_OPCIONAIS_COLUMNS
+     */
+    private function buildOpcionais(array $fcfo): array
+    {
+        return [
+            'num_filiacao_abac' => Normalizer::limit((string) ($fcfo['CAMPOALFAOP2'] ?? ''), 50),
+            'dt_filiacao_abac' => Normalizer::toDateOrNull($fcfo['DATAOP2'] ?? null),
+            'num_filiacao_sinac' => Normalizer::limit((string) ($fcfo['CAMPOALFAOP3'] ?? ''), 50),
+            'dt_filiacao_sinac' => Normalizer::toDateOrNull($fcfo['DATAOP3'] ?? null),
+            // DATAOP1 é a data de abertura mantida pela ABAC; DTINICATIVIDADES
+            // (início das atividades) só entra quando ela está vazia.
+            'dt_abertura_empresa' => Normalizer::toDateOrNull($fcfo['DATAOP1'] ?? null)
+                ?? Normalizer::toDateOrNull($fcfo['DTINICATIVIDADES'] ?? null),
+        ];
+    }
+
+    /**
+     * Preenche em cliente já existente só as colunas opcionais ainda vazias —
+     * valor digitado no app (ou vindo de outra carga) nunca é sobrescrito.
+     *
+     * @param array<string,mixed> $fcfo
+     */
+    private function backfillOpcionais(
+        int $clientId,
+        array $fcfo,
+        RmImportOptions $options,
+        RmImportReport $report,
+    ): void {
+        $atuais = $this->opcionaisAtuais[$clientId] ?? [];
+        $update = [];
+
+        foreach ($this->buildOpcionais($fcfo) as $coluna => $valor) {
+            $atual = $atuais[$coluna] ?? null;
+
+            if ($valor === null || trim((string) $atual) !== '') {
+                continue;
+            }
+
+            $update[$coluna] = $valor;
+        }
+
+        if ($update === []) {
+            return;
+        }
+
+        // DB::table em vez do model: backfill não é edição de usuário, não gera
+        // auditoria e não mexe no updated_at do cadastro.
+        if (! $options->dryRun) {
+            DB::table('clients')->where('id', $clientId)->update($update);
+        }
+
+        foreach ($update as $coluna => $valor) {
+            $report->backfillCampos[$coluna]++;
+            $this->opcionaisAtuais[$clientId][$coluna] = $valor;
+        }
+    }
+
+    /**
+     * CAMPOALFAOP1 guarda o site da administradora. O destino é
+     * client_redes_sociais (tipo 'site'), exibido em Cadastro > Informações da
+     * empresa — `clients` não tem coluna de site.
+     *
+     * @param array<string,mixed> $fcfo
+     * @return array<string,mixed>|null atributos da rede social, sem o client_id
+     */
+    private function resolveSite(array $fcfo, RmImportReport $report): ?array
+    {
+        $bruto = Normalizer::trimOrNull((string) ($fcfo['CAMPOALFAOP1'] ?? ''));
+
+        if ($bruto === null) {
+            return null;
+        }
+
+        $url = Normalizer::formatUrl($bruto);
+
+        if ($url === null) {
+            $report->sitesInvalidos++;
+            $this->warn($report, 'CAMPOALFAOP1 não é um endereço de site — ignorado', [
+                'coligada' => $fcfo['CODCOLIGADA'] ?? null,
+                'codcfo' => $fcfo['CODCFO'] ?? null,
+                'valor' => $bruto,
+            ]);
+
+            return null;
+        }
+
+        return [
+            'tipo' => 'site',
+            'rotulo' => 'Site da empresa',
+            'url' => Normalizer::limit($url, 500),
+        ];
+    }
+
+    /**
+     * Cria a rede social do site para o cliente que ainda não tem nenhuma do
+     * tipo. Retorna true quando criou (ou criaria, no dry-run).
+     *
+     * @param array<string,mixed> $site
+     */
+    private function attachSite(int $clientId, array $site, RmImportOptions $options): bool
+    {
+        if (isset($this->siteExistente[$clientId])) {
+            return false;
+        }
+
+        if (! $options->dryRun) {
+            ClientRedeSocial::create($site + ['client_id' => $clientId]);
+        }
+
+        $this->siteExistente[$clientId] = true;
+
+        return true;
     }
 
     /**
@@ -615,14 +784,15 @@ class RmImportService
     }
 
     /**
-     * Carrega o estado do destino: documentos normalizados, e-mails do cadastro
-     * e centros de custo já vinculados — duas queries leves.
+     * Carrega o estado do destino: documentos normalizados, e-mails do cadastro,
+     * campos opcionais já preenchidos, centros de custo e sites já vinculados —
+     * três queries leves.
      */
     private function loadClientMaps(RmImportReport $report): void
     {
         $rows = DB::table('clients')
             ->orderBy('id')
-            ->get(array_merge(['id', 'document'], self::CLIENT_EMAIL_COLUMNS));
+            ->get(array_merge(['id', 'document'], self::CLIENT_EMAIL_COLUMNS, self::CLIENT_OPCIONAIS_COLUMNS));
 
         foreach ($rows as $row) {
             $id = (int) $row->id;
@@ -651,10 +821,20 @@ class RmImportService
             if ($emails !== []) {
                 $this->emailSeed[$id] = $emails;
             }
+
+            $opcionais = [];
+            foreach (self::CLIENT_OPCIONAIS_COLUMNS as $col) {
+                $opcionais[$col] = $row->{$col};
+            }
+            $this->opcionaisAtuais[$id] = $opcionais;
         }
 
         foreach (DB::table('centros_custo')->get(['client_id', 'codigo']) as $cc) {
             $this->ccExisting[((int) $cc->client_id) . '|' . $cc->codigo] = true;
+        }
+
+        foreach (DB::table('client_redes_sociais')->where('tipo', 'site')->pluck('client_id') as $clientId) {
+            $this->siteExistente[(int) $clientId] = true;
         }
     }
 

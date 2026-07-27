@@ -32,6 +32,24 @@ final class RmImportReport
 
     public int $backfillCentroCusto = 0;
 
+    public int $redesSociaisCriadas = 0;
+
+    public int $sitesInvalidos = 0;
+
+    /**
+     * Colunas de clients preenchidas a partir dos campos opcionais da FCFO em
+     * clientes que já existiam (as vazias — nada é sobrescrito).
+     *
+     * @var array<string,int>
+     */
+    public array $backfillCampos = [
+        'num_filiacao_abac' => 0,
+        'dt_filiacao_abac' => 0,
+        'num_filiacao_sinac' => 0,
+        'dt_filiacao_sinac' => 0,
+        'dt_abertura_empresa' => 0,
+    ];
+
     public int $emailsExcedentes = 0;
 
     public int $erros = 0;
@@ -73,6 +91,13 @@ final class RmImportReport
             ['Contatos pulados (sem e-mail e sem nome)', $this->contatosPuladosSemChave],
             ['Centros de custo criados (clientes novos)', $this->centrosCustoCriados],
             ['Centros de custo criados (clientes existentes)', $this->backfillCentroCusto],
+            ['Sites criados (redes sociais)', $this->redesSociaisCriadas],
+            ['Sites ignorados (valor não é endereço)', $this->sitesInvalidos],
+            ['Nº filiação ABAC preenchido (existentes)', $this->backfillCampos['num_filiacao_abac']],
+            ['Data de filiação ABAC preenchida (existentes)', $this->backfillCampos['dt_filiacao_abac']],
+            ['Nº filiação SINAC preenchido (existentes)', $this->backfillCampos['num_filiacao_sinac']],
+            ['Data de filiação SINAC preenchida (existentes)', $this->backfillCampos['dt_filiacao_sinac']],
+            ['Data de abertura preenchida (existentes)', $this->backfillCampos['dt_abertura_empresa']],
             ['E-mails excedentes (sem coluna livre)', $this->emailsExcedentes],
             ['Erros (linhas puladas por falha)', $this->erros],
             ['Warnings registrados', count($this->warnings) + $this->warningsSuprimidos],
@@ -97,6 +122,9 @@ final class RmImportReport
             'contatos_pulados_sem_chave' => $this->contatosPuladosSemChave,
             'centros_custo_criados' => $this->centrosCustoCriados,
             'centros_custo_criados_existentes' => $this->backfillCentroCusto,
+            'redes_sociais_criadas' => $this->redesSociaisCriadas,
+            'sites_invalidos' => $this->sitesInvalidos,
+            'backfill_campos' => $this->backfillCampos,
             'emails_excedentes' => $this->emailsExcedentes,
             'erros' => $this->erros,
             'warnings' => $this->warnings,

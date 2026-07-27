@@ -37,6 +37,12 @@ class RmImportServiceTest extends TestCase
                 $t->string('rg', 30)->nullable();
                 $t->date('dt_nascimento')->nullable();
                 $t->date('dt_abertura_empresa')->nullable();
+                $t->string('num_filiacao_abac', 50)->nullable();
+                $t->date('dt_filiacao_abac')->nullable();
+                $t->string('num_filiacao_sinac', 50)->nullable();
+                $t->date('dt_filiacao_sinac')->nullable();
+                // NOT NULL default 0 no banco vivo, como associado_sinac.
+                $t->boolean('associado_abac')->default(false);
                 $t->text('emails_boletos')->nullable();
                 $t->text('obs_cadastro')->nullable();
                 // extensões legadas (migration 2026_07_21_000040)
@@ -115,6 +121,17 @@ class RmImportServiceTest extends TestCase
             });
         }
 
+        if (! Schema::hasTable('client_redes_sociais')) {
+            Schema::create('client_redes_sociais', function ($t) {
+                $t->id();
+                $t->unsignedBigInteger('client_id');
+                $t->string('tipo');
+                $t->string('rotulo', 100)->nullable();
+                $t->string('url', 500);
+                $t->timestamps();
+            });
+        }
+
         if (! Schema::hasTable('client_audit_logs')) {
             Schema::create('client_audit_logs', function ($t) {
                 $t->id();
@@ -173,6 +190,13 @@ class RmImportServiceTest extends TestCase
             'DTINICATIVIDADES' => '2010-05-10 00:00:00.000',
             'RAMOATIV' => 'Consórcios',
             'CAMPOLIVRE' => 'Observação livre do RM',
+            // Aba "Opcionais" do RM: site, filiação ABAC/SINAC e data de abertura.
+            'CAMPOALFAOP1' => 'www.empresateste.com.br',
+            'CAMPOALFAOP2' => '288',
+            'DATAOP2' => '1988-07-15 00:00:00.000',
+            'CAMPOALFAOP3' => '358',
+            'DATAOP3' => '1989-03-01 00:00:00.000',
+            'DATAOP1' => '1987-10-28 00:00:00.000',
             'RUA' => 'Av. Paulista',
             'NUMERO' => '1000',
             'COMPLEMENTO' => 'cj 101',
@@ -244,6 +268,7 @@ class RmImportServiceTest extends TestCase
         $this->assertSame(2, $report->enderecosCriados);
         $this->assertSame(1, $report->contatosCriados);
         $this->assertSame(1, $report->centrosCustoCriados);
+        $this->assertSame(1, $report->redesSociaisCriadas);
         $this->assertSame(0, $report->erros);
 
         $client = Client::query()->firstOrFail();
@@ -262,8 +287,15 @@ class RmImportServiceTest extends TestCase
         $this->assertSame('fiscal@x.com', $client->email_3);
         $this->assertSame('cobranca@x.com', $client->email_4);
         $this->assertSame('cobranca@x.com', $client->emails_boletos);
-        $this->assertSame('2010-05-10', $client->dt_abertura_empresa->format('Y-m-d'));
         $this->assertSame('Consórcios', $client->area_atuacao);
+
+        // Campos da aba "Opcionais" do RM.
+        $this->assertSame('288', $client->num_filiacao_abac);
+        $this->assertSame('1988-07-15', $client->dt_filiacao_abac->format('Y-m-d'));
+        $this->assertSame('358', $client->num_filiacao_sinac);
+        $this->assertSame('1989-03-01', $client->dt_filiacao_sinac->format('Y-m-d'));
+        // DATAOP1 prevalece sobre DTINICATIVIDADES (2010-05-10).
+        $this->assertSame('1987-10-28', $client->dt_abertura_empresa->format('Y-m-d'));
         $this->assertSame('Observação livre do RM', $client->notes);
         $this->assertStringContainsString('coligada 1, código 000123', $client->obs_cadastro);
         // O RM não tem regional: nada é inventado para regional_id.
@@ -280,6 +312,12 @@ class RmImportServiceTest extends TestCase
         $this->assertSame('01310-100', $enderecos[0]->cep);
         $this->assertSame('3550308', $enderecos[0]->cod_ibge);
         $this->assertSame('São Paulo', $enderecos[0]->municipio);
+
+        // Site do RM vira rede social clicável (clients não tem coluna de site).
+        $rede = DB::table('client_redes_sociais')->where('client_id', $client->id)->first();
+        $this->assertNotNull($rede);
+        $this->assertSame('site', $rede->tipo);
+        $this->assertSame('https://www.empresateste.com.br', $rede->url);
 
         $contato = DB::table('client_contatos')->where('client_id', $client->id)->first();
         $this->assertNotNull($contato);
@@ -405,11 +443,14 @@ class RmImportServiceTest extends TestCase
         $this->assertSame(0, $second->enderecosCriados);
         $this->assertSame(0, $second->centrosCustoCriados);
         $this->assertSame(0, $second->backfillCentroCusto);
+        $this->assertSame(0, $second->redesSociaisCriadas);
+        $this->assertSame([0, 0, 0, 0, 0], array_values($second->backfillCampos));
 
         $this->assertSame(1, DB::table('clients')->count());
         $this->assertSame(1, DB::table('client_contatos')->count());
         $this->assertSame(2, DB::table('client_enderecos')->count());
         $this->assertSame(1, DB::table('centros_custo')->count());
+        $this->assertSame(1, DB::table('client_redes_sociais')->count());
     }
 
     public function test_dry_run_nao_grava_nada_e_relata_igual_a_execucao_real(): void
@@ -430,6 +471,7 @@ class RmImportServiceTest extends TestCase
         $this->assertSame(0, DB::table('client_contatos')->count());
         $this->assertSame(0, DB::table('client_enderecos')->count());
         $this->assertSame(0, DB::table('centros_custo')->count());
+        $this->assertSame(0, DB::table('client_redes_sociais')->count());
 
         $real = $this->service($make())->run($this->importOptions());
 
@@ -438,6 +480,7 @@ class RmImportServiceTest extends TestCase
         $this->assertSame($real->contatosCriados, $dry->contatosCriados);
         $this->assertSame($real->enderecosCriados, $dry->enderecosCriados);
         $this->assertSame($real->centrosCustoCriados, $dry->centrosCustoCriados);
+        $this->assertSame($real->redesSociaisCriadas, $dry->redesSociaisCriadas);
         $this->assertSame(1, DB::table('clients')->count());
     }
 
@@ -485,6 +528,145 @@ class RmImportServiceTest extends TestCase
 
         $this->assertSame(0, $report->backfillCentroCusto);
         $this->assertSame(0, DB::table('centros_custo')->count());
+    }
+
+    /**
+     * Os campos opcionais do RM são a única fonte de filiação ABAC/SINAC, data de
+     * abertura e site — e a base já estava carregada quando eles foram mapeados.
+     * Por isso eles entram também em cliente existente, mas só onde está vazio.
+     */
+    public function test_campos_opcionais_completam_cliente_existente_sem_sobrescrever(): void
+    {
+        $clientId = DB::table('clients')->insertGetId([
+            'name' => 'MANTEM',
+            'document' => '12.345.678/0001-95',
+            'num_filiacao_abac' => '999',            // já preenchido: o RM não pode mexer
+            'dt_abertura_empresa' => '2000-01-01',   // idem
+            'created_at' => '2020-01-01 00:00:00',
+            'updated_at' => '2020-01-01 00:00:00',
+        ]);
+
+        $report = $this->service(new FakeRmReader(fcfo: [$this->fcfoRow()]))
+            ->run($this->importOptions());
+
+        $this->assertSame(1, $report->clientsPuladosExistentes);
+        $this->assertSame([
+            'num_filiacao_abac' => 0,
+            'dt_filiacao_abac' => 1,
+            'num_filiacao_sinac' => 1,
+            'dt_filiacao_sinac' => 1,
+            'dt_abertura_empresa' => 0,
+        ], $report->backfillCampos);
+
+        $row = DB::table('clients')->where('id', $clientId)->first();
+        $this->assertSame('999', $row->num_filiacao_abac);
+        $this->assertStringStartsWith('2000-01-01', (string) $row->dt_abertura_empresa);
+        $this->assertStringStartsWith('1988-07-15', (string) $row->dt_filiacao_abac);
+        $this->assertSame('358', $row->num_filiacao_sinac);
+        $this->assertStringStartsWith('1989-03-01', (string) $row->dt_filiacao_sinac);
+
+        // Backfill não é edição de usuário: sem auditoria e sem tocar no updated_at.
+        $this->assertSame('MANTEM', $row->name);
+        $this->assertSame('2020-01-01 00:00:00', (string) $row->updated_at);
+        $this->assertSame(0, DB::table('client_audit_logs')->count());
+
+        // O site do RM entra como rede social do cliente existente.
+        $this->assertSame(1, $report->redesSociaisCriadas);
+        $this->assertSame(
+            'https://www.empresateste.com.br',
+            DB::table('client_redes_sociais')->where('client_id', $clientId)->value('url'),
+        );
+    }
+
+    /**
+     * O RM não é fonte de quem é associado ABAC: essa informação vem do legado
+     * (clients:backfill-legado) e do WordPress dos associados (associados:sync).
+     * A carga do RM não pode mexer em `associado_abac` em hipótese nenhuma.
+     */
+    public function test_import_do_rm_nunca_altera_associado_abac(): void
+    {
+        $associada = DB::table('clients')->insertGetId([
+            'name' => 'ASSOCIADA', 'document' => '12.345.678/0001-95', 'associado_abac' => true,
+            'created_at' => now(), 'updated_at' => now(),
+        ]);
+        $naoAssociada = DB::table('clients')->insertGetId([
+            'name' => 'NAO ASSOCIADA', 'document' => '04.124.922/0001-61', 'associado_abac' => false,
+            'created_at' => now(), 'updated_at' => now(),
+        ]);
+
+        $reader = new FakeRmReader(fcfo: [
+            $this->fcfoRow(['CODCFO' => 'A1', 'CGCCFO' => '12.345.678/0001-95']),
+            $this->fcfoRow(['CODCFO' => 'A2', 'CGCCFO' => '04.124.922/0001-61']),
+            $this->fcfoRow(['CODCFO' => 'A3', 'CGCCFO' => '52.568.821/0001-22']), // cliente novo
+        ]);
+
+        $this->service($reader)->run($this->importOptions());
+
+        $this->assertSame(1, (int) DB::table('clients')->where('id', $associada)->value('associado_abac'));
+        $this->assertSame(0, (int) DB::table('clients')->where('id', $naoAssociada)->value('associado_abac'));
+
+        // Cliente criado pela carga também não vem marcado como associado.
+        $this->assertSame(
+            0,
+            (int) DB::table('clients')->where('document', '52.568.821/0001-22')->value('associado_abac'),
+        );
+    }
+
+    public function test_backfill_desligado_nao_toca_nos_campos_opcionais_nem_no_site(): void
+    {
+        DB::table('clients')->insert([
+            'name' => 'MANTEM', 'document' => '12.345.678/0001-95',
+            'created_at' => now(), 'updated_at' => now(),
+        ]);
+
+        $report = $this->service(new FakeRmReader(fcfo: [$this->fcfoRow()]))
+            ->run($this->importOptions(backfill: false));
+
+        $this->assertSame([0, 0, 0, 0, 0], array_values($report->backfillCampos));
+        $this->assertSame(0, $report->redesSociaisCriadas);
+        $this->assertNull(DB::table('clients')->value('num_filiacao_abac'));
+        $this->assertSame(0, DB::table('client_redes_sociais')->count());
+    }
+
+    public function test_cliente_que_ja_tem_site_nao_ganha_um_segundo(): void
+    {
+        $clientId = DB::table('clients')->insertGetId([
+            'name' => 'MANTEM', 'document' => '12.345.678/0001-95',
+            'created_at' => now(), 'updated_at' => now(),
+        ]);
+        DB::table('client_redes_sociais')->insert([
+            'client_id' => $clientId, 'tipo' => 'site', 'rotulo' => null,
+            'url' => 'https://outro-endereco.com.br',
+            'created_at' => now(), 'updated_at' => now(),
+        ]);
+
+        $report = $this->service(new FakeRmReader(fcfo: [$this->fcfoRow()]))
+            ->run($this->importOptions());
+
+        $this->assertSame(0, $report->redesSociaisCriadas);
+        $this->assertSame(1, DB::table('client_redes_sociais')->count());
+        $this->assertSame('https://outro-endereco.com.br', DB::table('client_redes_sociais')->value('url'));
+    }
+
+    /**
+     * O CAMPOALFAOP1 é campo livre: no RM real há telefone e texto solto no meio
+     * dos endereços. O destino é um link clicável — lixo vira warning, não link.
+     */
+    public function test_campoalfaop1_que_nao_e_endereco_nao_vira_rede_social(): void
+    {
+        $reader = new FakeRmReader(fcfo: [
+            $this->fcfoRow(['CODCFO' => 'A1', 'CGCCFO' => '12.345.678/0001-95', 'CAMPOALFAOP1' => '(11) 3257-4182 - 8 and.']),
+            $this->fcfoRow(['CODCFO' => 'A2', 'CGCCFO' => '04.124.922/0001-61', 'CAMPOALFAOP1' => 'http://www.comesquema.com.br/']),
+        ]);
+
+        $report = $this->service($reader)->run($this->importOptions());
+
+        $this->assertSame(1, $report->sitesInvalidos);
+        $this->assertSame(1, $report->redesSociaisCriadas);
+        $this->assertSame(
+            ['http://www.comesquema.com.br/'],
+            DB::table('client_redes_sociais')->pluck('url')->all(),
+        );
     }
 
     public function test_centro_custo_por_cliente_nao_duplica_em_reexecucao(): void

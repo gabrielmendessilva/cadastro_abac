@@ -26,5 +26,13 @@ return Application::configure(basePath: dirname(__DIR__))
         ]);
     })
     ->withExceptions(function ($exceptions) {
-        //
+        // 419 (CSRF/sessão expirada): em vez da página de erro, volta ao
+        // formulário com mensagem amigável. Acontece quando a página ficou
+        // aberta além do SESSION_LIFETIME ou atravessou um deploy.
+        $exceptions->render(function (\Illuminate\Session\TokenMismatchException $e, Request $request) {
+            return redirect()
+                ->back()
+                ->withInput($request->except('_token', 'password'))
+                ->withErrors(['email' => 'Sua sessão expirou. Tente novamente.']);
+        });
     })->create();

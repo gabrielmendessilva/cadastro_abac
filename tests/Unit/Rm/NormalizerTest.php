@@ -81,6 +81,24 @@ class NormalizerTest extends TestCase
         $this->assertNull(Normalizer::limit('   ', 10));
     }
 
+    /**
+     * CAMPOALFAOP1 é campo livre: chega com e sem esquema, com espaço em branco
+     * na ponta e, às vezes, com conteúdo que não é endereço nenhum.
+     */
+    public function test_format_url(): void
+    {
+        $this->assertSame('https://www.acaua.com.br', Normalizer::formatUrl('www.acaua.com.br'));
+        $this->assertSame('https://www.cnvw.com.br', Normalizer::formatUrl("\twww.cnvw.com.br"));
+        $this->assertSame('https://abradir.com.br', Normalizer::formatUrl('abradir.com.br'));
+        $this->assertSame('http://reverts.com.br/', Normalizer::formatUrl(' http://reverts.com.br/'));
+        $this->assertSame('https://x.com/a?b=1', Normalizer::formatUrl('https://x.com/a?b=1'));
+
+        $this->assertNull(Normalizer::formatUrl('(11) 3257-4182 - 8 and.')); // telefone com espaços
+        $this->assertNull(Normalizer::formatUrl('syl_arte_molduras'));       // texto sem domínio
+        $this->assertNull(Normalizer::formatUrl('   '));
+        $this->assertNull(Normalizer::formatUrl(null));
+    }
+
     public function test_trim_or_null(): void
     {
         $this->assertNull(Normalizer::trimOrNull('   '));

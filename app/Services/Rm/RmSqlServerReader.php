@@ -24,6 +24,9 @@ class RmSqlServerReader implements RmReaderInterface
         'PESSOAFISOUJUR', 'EMAIL', 'EMAILFISCAL', 'EMAILPGTO', 'EMAILENTREGA',
         'TELEFONE', 'TELEX', 'CONTATO', 'INSCRESTADUAL', 'INSCRMUNICIPAL',
         'CIDENTIDADE', 'DTNASCIMENTO', 'DTINICATIVIDADES', 'RAMOATIV', 'CAMPOLIVRE',
+        // Campos livres da aba "Opcionais" do RM, usados pela ABAC para site,
+        // filiação ABAC/SINAC e data de abertura da empresa.
+        'CAMPOALFAOP1', 'CAMPOALFAOP2', 'CAMPOALFAOP3', 'DATAOP1', 'DATAOP2', 'DATAOP3',
         'RUA', 'NUMERO', 'COMPLEMENTO', 'BAIRRO', 'CIDADE', 'CODETD', 'CEP', 'PAIS', 'CODMUNICIPIO',
         'RUAPGTO', 'NUMEROPGTO', 'COMPLEMENTOPGTO', 'BAIRROPGTO', 'CIDADEPGTO',
         'CODETDPGTO', 'CEPPGTO', 'PAISPAGTO', 'CODMUNICIPIOPGTO',

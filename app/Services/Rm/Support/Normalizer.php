@@ -135,6 +135,29 @@ final class Normalizer
         return self::trimOrNull($value);
     }
 
+    /**
+     * Endereço de site do RM (CAMPOALFAOP1), que vem tanto como "www.x.com.br"
+     * quanto como "http://x.com". O destino é um link clicável, então o esquema
+     * é sempre garantido; valores que claramente não são endereço (telefone,
+     * texto solto) viram null em vez de virar um link quebrado.
+     */
+    public static function formatUrl(?string $value): ?string
+    {
+        $value = self::trimOrNull($value);
+
+        if ($value === null || preg_match('/\s/u', $value) === 1) {
+            return null;
+        }
+
+        $temEsquema = preg_match('#^https?://#i', $value) === 1;
+
+        if (! $temEsquema && ! str_contains($value, '.')) {
+            return null;
+        }
+
+        return $temEsquema ? $value : 'https://' . $value;
+    }
+
     /** Trunca defensivamente para caber em varchar(N) do destino. */
     public static function limit(?string $value, int $max): ?string
     {

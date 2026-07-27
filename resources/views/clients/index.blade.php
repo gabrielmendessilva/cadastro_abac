@@ -14,10 +14,15 @@
         @endcan
     </div>
 
-    <form method="GET" class="mb-6 grid gap-3 md:grid-cols-5">
+    <form method="GET" class="mb-6 grid gap-3 md:grid-cols-6">
         <input type="text" name="search" value="{{ request('search') }}" class="rounded-2xl border border-slate-300 px-4 py-3" placeholder="Nome, CPF/CNPJ ou e-mail">
         <input type="text" name="city" value="{{ request('city') }}" class="rounded-2xl border border-slate-300 px-4 py-3" placeholder="Cidade">
         <input type="text" name="state" value="{{ request('state') }}" maxlength="2" class="rounded-2xl border border-slate-300 px-4 py-3 uppercase" placeholder="UF">
+        <select name="associado" class="rounded-2xl border border-slate-300 px-4 py-3">
+            <option value="">Administradora</option>
+            <option value="1" @selected(request('associado') === '1')>Associado (S)</option>
+            <option value="0" @selected(request('associado') === '0')>Não associado (N)</option>
+        </select>
         <select name="status" class="rounded-2xl border border-slate-300 px-4 py-3">
             <option value="">Status</option>
             <option value="1" @selected(request('status') === '1')>Ativo</option>

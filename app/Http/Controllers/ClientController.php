@@ -33,6 +33,10 @@ class ClientController extends Controller
             ->when($request->filled('status'), function ($query) use ($request) {
                 $query->where('status', $request->status === '1');
             })
+            // Administradora: associada à ABAC ('S' no legado) ou não.
+            ->when($request->filled('associado'), function ($query) use ($request) {
+                $query->where('associado_abac', $request->associado === '1');
+            })
             ->when($request->filled('state'), fn($query) => $query->whereHas('enderecos', fn($q) => $q->where('estado', $request->string('state'))))
             ->when($request->filled('city'), fn($query) => $query->whereHas('enderecos', fn($q) => $q->where('municipio', 'like', '%' . $request->string('city') . '%')))
             ->latest()

@@ -48,7 +48,18 @@
       "Bash(git -C /Users/gabrielmendes/Desktop/laravel-ged-crud grep -n \"customLog\" 99fad7a --)",
       "Bash(git -C /Users/gabrielmendes/Desktop/laravel-ged-crud grep -l \"customLog\" 99fad7a)",
       "Bash(git -C /Users/gabrielmendes/Desktop/laravel-ged-crud grep -l \"customLog\" 3352d3f)",
-      "Bash(git -C /Users/gabrielmendes/Desktop/laravel-ged-crud log --all --oneline)"
+      "Bash(git -C /Users/gabrielmendes/Desktop/laravel-ged-crud log --all --oneline)",
+      "Bash(curl -sI https://ged.abac-admin.cloud/login)",
+      "Bash(curl -skI https://abac-admin.cloud/)",
+      "Bash(curl -skI https://www.abac-admin.cloud/)",
+      "Bash(rm -f c3.txt)",
+      "Bash(curl -sc c3.txt -o /dev/null https://ged.abac-admin.cloud/login)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\\\\n\" -b c3.txt -X POST https://ged.abac-admin.cloud/login --data-urlencode \"_token=tokenvelhoinvalido\" --data-urlencode \"email=x@x.com\" --data-urlencode \"password=x\")",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\\\\n\" -X POST https://ged.abac-admin.cloud/login --data-urlencode \"_token=qualquer\" --data-urlencode \"email=x@x.com\" --data-urlencode \"password=x\")",
+      "Bash(./vendor/bin/phpunit tests/Feature/Rm)",
+      "Bash(./vendor/bin/phpunit)",
+      "Bash(python3 -)",
+      "Bash(git --no-pager diff --stat)"
     ]
   }
 }

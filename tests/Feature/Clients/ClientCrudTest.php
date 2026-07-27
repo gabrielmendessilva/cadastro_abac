@@ -162,6 +162,32 @@ class ClientCrudTest extends TestCase
         $response->assertDontSee('99.888.777/0001-11');
     }
 
+    /** É o filtro que o login já abre aplicado (Administradora: Associado (S)). */
+    public function test_index_filtra_por_administradora_associada(): void
+    {
+        Client::factory()->create(['name' => 'ASSOCIADA LTDA', 'associado_abac' => true]);
+        Client::factory()->create(['name' => 'NAO ASSOCIADA SA', 'associado_abac' => false]);
+
+        $user = $this->userComRole();
+
+        $associadas = $this->actingAs($user)->get(route('clients.index', ['associado' => 1]));
+        $associadas->assertOk();
+        $associadas->assertSee('ASSOCIADA LTDA');
+        $associadas->assertDontSee('NAO ASSOCIADA SA');
+        // O select do filtro precisa aparecer marcado, senão o usuário não vê
+        // que a lista já chegou filtrada.
+        $associadas->assertSee('<option value="1" selected>Associado (S)</option>', false);
+
+        $naoAssociadas = $this->actingAs($user)->get(route('clients.index', ['associado' => 0]));
+        $naoAssociadas->assertSee('NAO ASSOCIADA SA');
+        $naoAssociadas->assertDontSee('ASSOCIADA LTDA');
+
+        // Sem o parâmetro, o filtro não se aplica.
+        $todas = $this->actingAs($user)->get(route('clients.index'));
+        $todas->assertSee('ASSOCIADA LTDA');
+        $todas->assertSee('NAO ASSOCIADA SA');
+    }
+
     // ---------------------------------------------------------------- STORE
 
     public function test_store_cria_o_cliente_nas_colunas_certas(): void
