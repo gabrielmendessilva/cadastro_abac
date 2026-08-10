@@ -137,10 +137,15 @@ class ClientController extends Controller
             ->paginate(10, ['*'], 'addresses_page')
             ->withQueryString();
     
+        $contactSort = in_array($request->query('contact_sort'), ['nome', 'departamento'], true)
+            ? $request->query('contact_sort')
+            : null;
+        $contactDir = $request->query('contact_dir') === 'desc' ? 'desc' : 'asc';
+
         $contacts = $client->contatos()
             ->when($request->filled('contact_search'), function ($query) use ($request) {
                 $search = $request->contact_search;
-    
+
                 $query->where(function ($subQuery) use ($search) {
                     $subQuery->where('nome', 'like', "%{$search}%")
                         ->orWhere('email', 'like', "%{$search}%")
@@ -150,7 +155,14 @@ class ClientController extends Controller
                         ->orWhere('departamento', 'like', "%{$search}%");
                 });
             })
-            ->latest()
+            ->when(
+                $contactSort,
+                fn ($query) => $query
+                    // vazios/nulos sempre no fim, independente da direção
+                    ->orderByRaw("({$contactSort} IS NULL OR {$contactSort} = '') ASC")
+                    ->orderBy($contactSort, $contactDir),
+                fn ($query) => $query->latest()
+            )
             ->paginate(10, ['*'], 'contacts_page')
             ->withQueryString();
     
@@ -194,6 +206,8 @@ class ClientController extends Controller
             'documents',
             'addresses',
             'contacts',
+            'contactSort',
+            'contactDir',
             'opcionais',
             'activeTab',
             'activeSubtab',

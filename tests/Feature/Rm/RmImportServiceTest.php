@@ -44,6 +44,8 @@ class RmImportServiceTest extends TestCase
                 // NOT NULL default 0 no banco vivo, como associado_sinac.
                 $t->boolean('associado_abac')->default(false);
                 $t->string('categoria', 100)->nullable();
+                $t->string('situacao_abac', 100)->nullable();
+                $t->string('ocorrencia_abac', 20)->nullable();
                 $t->text('emails_boletos')->nullable();
                 $t->text('obs_cadastro')->nullable();
                 // extensões legadas (migration 2026_07_21_000040)
@@ -153,6 +155,8 @@ class RmImportServiceTest extends TestCase
                 $t->string('papel')->default('titular');
                 $t->text('observacoes')->nullable();
                 $t->timestamps();
+                // Mesma trava do banco vivo (migration 2026_08_10_000020).
+                $t->unique(['client_id', 'contato_id', 'comite_nome']);
             });
         }
 
@@ -486,7 +490,7 @@ class RmImportServiceTest extends TestCase
         $this->assertSame(0, $second->centrosCustoCriados);
         $this->assertSame(0, $second->backfillCentroCusto);
         $this->assertSame(0, $second->redesSociaisCriadas);
-        $this->assertSame([0, 0, 0, 0, 0, 0], array_values($second->backfillCampos));
+        $this->assertSame([0, 0, 0, 0, 0, 0, 0, 0], array_values($second->backfillCampos));
 
         $this->assertSame(1, DB::table('clients')->count());
         $this->assertSame(1, DB::table('client_contatos')->count());
@@ -599,6 +603,8 @@ class RmImportServiceTest extends TestCase
             'dt_filiacao_sinac' => 1,
             'dt_abertura_empresa' => 0,
             'categoria' => 1,
+            'situacao_abac' => 0,
+            'ocorrencia_abac' => 0,
         ], $report->backfillCampos);
 
         $row = DB::table('clients')->where('id', $clientId)->first();
@@ -665,7 +671,7 @@ class RmImportServiceTest extends TestCase
         $report = $this->service(new FakeRmReader(fcfo: [$this->fcfoRow()]))
             ->run($this->importOptions(backfill: false));
 
-        $this->assertSame([0, 0, 0, 0, 0, 0], array_values($report->backfillCampos));
+        $this->assertSame([0, 0, 0, 0, 0, 0, 0, 0], array_values($report->backfillCampos));
         $this->assertSame([0, 0, 0, 0, 0, 0, 0], array_values($report->backfillContato));
         $this->assertSame(0, $report->redesSociaisCriadas);
         $this->assertNull(DB::table('clients')->value('num_filiacao_abac'));
@@ -919,6 +925,48 @@ class RmImportServiceTest extends TestCase
         $this->assertSame(0, $segundo->comitesCriados);
         $this->assertSame(2, DB::table('client_comites')->count());
         $this->assertSame([0, 0, 0, 0, 0, 0, 0], array_values($segundo->backfillContato));
+    }
+
+    /**
+     * FCFOCOMPL.STATUS/OCORRENCIA são o recorte de "cadastro em ordem" que a
+     * secretaria usava nos relatórios. São siglas sem dicionário na origem, então
+     * entram como vieram — quem traduz é o negócio.
+     */
+    public function test_status_e_ocorrencia_da_fcfocompl_viram_situacao_e_ocorrencia_abac(): void
+    {
+        $reader = new FakeRmReader(
+            fcfo: [$this->fcfoRow()],
+            fcfoCompl: ['1|000123' => ['CODCOLIGADA' => 1, 'CODCFO' => '000123', 'STATUS' => 'OK', 'OCORRENCIA' => 'CR']],
+        );
+
+        $this->service($reader)->run($this->importOptions());
+
+        $client = Client::query()->firstOrFail();
+        $this->assertSame('OK', $client->situacao_abac);
+        $this->assertSame('CR', $client->ocorrencia_abac);
+    }
+
+    public function test_cliente_existente_sem_situacao_recebe_a_do_rm(): void
+    {
+        $clientId = DB::table('clients')->insertGetId([
+            'name' => 'MANTEM', 'document' => '12.345.678/0001-95',
+            'ocorrencia_abac' => 'CA', // já preenchido: não pode ser sobrescrito
+            'created_at' => now(), 'updated_at' => now(),
+        ]);
+
+        $reader = new FakeRmReader(
+            fcfo: [$this->fcfoRow()],
+            fcfoCompl: ['1|000123' => ['CODCOLIGADA' => 1, 'CODCFO' => '000123', 'STATUS' => 'OK', 'OCORRENCIA' => 'OK']],
+        );
+
+        $report = $this->service($reader)->run($this->importOptions());
+
+        $this->assertSame(1, $report->backfillCampos['situacao_abac']);
+        $this->assertSame(0, $report->backfillCampos['ocorrencia_abac']);
+
+        $row = DB::table('clients')->where('id', $clientId)->first();
+        $this->assertSame('OK', $row->situacao_abac);
+        $this->assertSame('CA', $row->ocorrencia_abac);
     }
 
     /** A descrição da FTCF é o rótulo que vale; o código é só a chave. */

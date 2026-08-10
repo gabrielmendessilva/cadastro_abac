@@ -644,6 +644,20 @@
             @endif
 
             @if ($activeTab === 'contatos')
+                @php
+                    $contactSortUrl = function (string $column) use ($client, $contactSort, $contactDir) {
+                        return route('clients.show', array_merge(
+                            request()->except(['contacts_page', 'contact_sort', 'contact_dir']),
+                            [
+                                'client' => $client,
+                                'tab' => 'contatos',
+                                'contact_sort' => $column,
+                                'contact_dir' => $contactSort === $column && $contactDir === 'asc' ? 'desc' : 'asc',
+                            ]
+                        ));
+                    };
+                @endphp
+
                 <div x-data="{ createOpen: false, editOpen: null }" class="space-y-4">
                     <div class="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
                         <div>
@@ -662,6 +676,10 @@
 
                     <form method="GET" action="{{ route('clients.show', $client) }}" class="grid grid-cols-1 gap-3 md:grid-cols-4">
                         <input type="hidden" name="tab" value="contatos">
+                        @if ($contactSort)
+                            <input type="hidden" name="contact_sort" value="{{ $contactSort }}">
+                            <input type="hidden" name="contact_dir" value="{{ $contactDir }}">
+                        @endif
                         <div class="md:col-span-2">
                             <input type="text" name="contact_search" value="{{ request('contact_search') }}"
                                    placeholder="Buscar por nome, e-mail, telefone, função..."
@@ -683,11 +701,31 @@
                             <table class="min-w-full divide-y divide-slate-200">
                                 <thead class="bg-slate-50">
                                     <tr>
-                                        <th class="px-4 py-3 text-left text-xs font-semibold uppercase text-slate-500">Nome</th>
+                                        <th class="px-4 py-3 text-left text-xs font-semibold uppercase text-slate-500">
+                                            <a href="{{ $contactSortUrl('nome') }}"
+                                               class="inline-flex items-center gap-1 hover:text-slate-900">
+                                                Nome
+                                                @if ($contactSort === 'nome')
+                                                    <span class="text-slate-900">{{ $contactDir === 'asc' ? '▲' : '▼' }}</span>
+                                                @else
+                                                    <span class="text-slate-300">↕</span>
+                                                @endif
+                                            </a>
+                                        </th>
                                         <th class="px-4 py-3 text-left text-xs font-semibold uppercase text-slate-500">Função</th>
                                         <th class="px-4 py-3 text-left text-xs font-semibold uppercase text-slate-500">E-mail</th>
                                         <th class="px-4 py-3 text-left text-xs font-semibold uppercase text-slate-500">Telefone</th>
-                                        <th class="px-4 py-3 text-left text-xs font-semibold uppercase text-slate-500">Departamento</th>
+                                        <th class="px-4 py-3 text-left text-xs font-semibold uppercase text-slate-500">
+                                            <a href="{{ $contactSortUrl('departamento') }}"
+                                               class="inline-flex items-center gap-1 hover:text-slate-900">
+                                                Departamento
+                                                @if ($contactSort === 'departamento')
+                                                    <span class="text-slate-900">{{ $contactDir === 'asc' ? '▲' : '▼' }}</span>
+                                                @else
+                                                    <span class="text-slate-300">↕</span>
+                                                @endif
+                                            </a>
+                                        </th>
                                         <th class="px-4 py-3 text-left text-xs font-semibold uppercase text-slate-500">Flags</th>
                                         @can('clients.edit')
                                             <th class="px-4 py-3 text-right text-xs font-semibold uppercase text-slate-500">Ações</th>

@@ -18,6 +18,7 @@ class FakeRmReader implements RmReaderInterface
      * @param list<string> $complColumns
      * @param array<string,array<string,mixed>> $compl "coligada|codcfo|idcontato" => linha
      * @param list<array<string,mixed>> $tiposCliFor linhas FTCF
+     * @param array<string,array<string,mixed>> $fcfoCompl "coligada|codcfo" => linha FCFOCOMPL
      */
     public function __construct(
         private readonly array $fcfo = [],
@@ -27,7 +28,13 @@ class FakeRmReader implements RmReaderInterface
         private readonly array $complColumns = [],
         private readonly array $compl = [],
         private readonly array $tiposCliFor = [],
+        private readonly array $fcfoCompl = [],
     ) {}
+
+    public function complementaresForKeys(array $codesByColigada): array
+    {
+        return $this->fcfoCompl;
+    }
 
     public function preflight(): void
     {

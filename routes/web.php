@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\AniversarianteController;
 use App\Http\Controllers\Auth\AuthenticatedSessionController;
 use App\Http\Controllers\ClientController;
 use App\Http\Controllers\ClientDocumentController;
@@ -39,6 +40,10 @@ Route::middleware('auth')->group(function () {
 
     Route::resource('users', UserController::class);
     Route::resource('clients', ClientController::class);
+
+    // Aniversariantes do mês (substitui a consulta SQL que era rodada no RM)
+    Route::get('/aniversariantes', [AniversarianteController::class, 'index'])->name('aniversariantes.index');
+    Route::get('/aniversariantes/exportar', [AniversarianteController::class, 'export'])->name('aniversariantes.export');
 
     // Perfis e permissões — somente Root
     Route::middleware('root')->group(function () {

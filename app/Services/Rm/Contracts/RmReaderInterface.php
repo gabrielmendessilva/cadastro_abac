@@ -44,6 +44,15 @@ interface RmReaderInterface
      */
     public function defaultsForKeys(array $codesByColigada): array;
 
+    /**
+     * Complementares do cli/for (FCFOCOMPL) — de onde sai o recorte de cadastro
+     * em ordem (STATUS/OCORRENCIA). Um cli/for tem no máximo uma linha.
+     *
+     * @param  array<int,list<string>>  $codesByColigada
+     * @return array<string,array<string,mixed>>  "coligada|codcfo" => linha
+     */
+    public function complementaresForKeys(array $codesByColigada): array;
+
     /** @return list<array<string,mixed>> todas as linhas de GCCUSTO */
     public function allCentrosCusto(): array;
 

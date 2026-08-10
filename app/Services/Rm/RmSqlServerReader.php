@@ -42,6 +42,16 @@ class RmSqlServerReader implements RmReaderInterface
         'RAMAL', 'FAX', 'FUNCAO', 'ATIVO', 'DATANASCIMENTO', 'OBSERVACAO',
     ];
 
+    /**
+     * FCFOCOMPL tem dezenas de colunas custom (EMAIL1A..EMAIL21A etc.); daqui só
+     * interessa o par que a secretaria usava como recorte de "cadastro em ordem".
+     * ASSOCIADO existe nesta tabela e é deliberadamente ignorado — quem é
+     * associado vem do legado e do WordPress, nunca do RM.
+     *
+     * @var list<string>
+     */
+    private const FCFOCOMPL_COLUMNS = ['CODCOLIGADA', 'CODCFO', 'STATUS', 'OCORRENCIA'];
+
     /** @var list<string> */
     private const GCCUSTO_COLUMNS = [
         'CODCOLIGADA', 'CODCCUSTO', 'NOME', 'CODREDUZIDO', 'CODCLASSIFICA',
@@ -69,6 +79,7 @@ class RmSqlServerReader implements RmReaderInterface
             'FCFODEF' => ['CODCOLIGADA', 'CODCOLCFO', 'CODCFO', 'CODCCUSTO'],
             'GCCUSTO' => self::GCCUSTO_COLUMNS,
             'FTCF' => ['CODCOLIGADA', 'CODTCF', 'DESCRICAO'],
+            'FCFOCOMPL' => self::FCFOCOMPL_COLUMNS,
         ];
 
         $found = $this->columnsByTable(array_keys($required));
@@ -178,6 +189,32 @@ class RmSqlServerReader implements RmReaderInterface
             ->get()
             ->map(static fn (object $row): array => (array) $row)
             ->all();
+    }
+
+    public function complementaresForKeys(array $codesByColigada): array
+    {
+        if ($codesByColigada === []) {
+            return [];
+        }
+
+        $rows = $this->connection->table($this->qualify('FCFOCOMPL'))
+            ->select(self::FCFOCOMPL_COLUMNS)
+            ->where(function (Builder $query) use ($codesByColigada): void {
+                foreach ($codesByColigada as $coligada => $codes) {
+                    $query->orWhere(function (Builder $inner) use ($coligada, $codes): void {
+                        $inner->where('CODCOLIGADA', $coligada)->whereIn('CODCFO', $codes);
+                    });
+                }
+            })
+            ->get();
+
+        $keyed = [];
+        foreach ($rows as $row) {
+            $row = (array) $row;
+            $keyed[$row['CODCOLIGADA'].'|'.trim((string) $row['CODCFO'])] = $row;
+        }
+
+        return $keyed;
     }
 
     public function allTiposCliFor(): array

@@ -49,6 +49,8 @@ final class RmImportReport
         'dt_filiacao_sinac' => 0,
         'dt_abertura_empresa' => 0,
         'categoria' => 0,
+        'situacao_abac' => 0,
+        'ocorrencia_abac' => 0,
     ];
 
     /**
@@ -117,6 +119,8 @@ final class RmImportReport
             ['Data de filiação SINAC preenchida (existentes)', $this->backfillCampos['dt_filiacao_sinac']],
             ['Data de abertura preenchida (existentes)', $this->backfillCampos['dt_abertura_empresa']],
             ['Categoria preenchida (existentes)', $this->backfillCampos['categoria']],
+            ['Situação ABAC preenchida (existentes)', $this->backfillCampos['situacao_abac']],
+            ['Ocorrência ABAC preenchida (existentes)', $this->backfillCampos['ocorrencia_abac']],
             ['Vínculos de comitê criados', $this->comitesCriados],
             ['Contatos: nascimento preenchido (existentes)', $this->backfillContato['dt_nascimento']],
             ['Contatos: aniversário preenchido (existentes)', $this->backfillContato['aniversario']],

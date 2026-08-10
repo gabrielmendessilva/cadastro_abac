@@ -11,6 +11,7 @@ use App\Models\ClientRedeSocial;
 use App\Services\Rm\Contracts\RmReaderInterface;
 use App\Services\Rm\Exceptions\RmImportException;
 use App\Services\Rm\Support\Normalizer;
+use Illuminate\Database\UniqueConstraintViolationException;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 use Psr\Log\LoggerInterface;
@@ -57,6 +58,7 @@ class RmImportService
         'num_filiacao_abac', 'dt_filiacao_abac',
         'num_filiacao_sinac', 'dt_filiacao_sinac',
         'dt_abertura_empresa', 'categoria',
+        'situacao_abac', 'ocorrencia_abac',
     ];
 
     /** Idem para client_contatos: colunas alimentadas por FCFOCONTATO/FCFOCONTATOCOMPL. */
@@ -159,6 +161,7 @@ class RmImportService
 
                     $contatosMap = $this->reader->contatosForKeys($keys);
                     $defsMap = $this->reader->defaultsForKeys($keys);
+                    $fcfoComplMap = $this->reader->complementaresForKeys($keys);
                     $complMap = $complColumns !== []
                         ? $this->reader->contatosComplForKeys($keys, $complColumns)
                         : [];
@@ -171,6 +174,7 @@ class RmImportService
                                 $fcfo,
                                 $contatosMap[$key] ?? [],
                                 $defsMap[$key] ?? [],
+                                $fcfoComplMap[$key] ?? [],
                                 $complMap,
                                 $options,
                                 $report,
@@ -218,12 +222,14 @@ class RmImportService
      * @param array<string,mixed> $fcfo
      * @param list<array<string,mixed>> $contatos
      * @param list<array<string,mixed>> $defRows
+     * @param array<string,mixed> $fcfoCompl linha de FCFOCOMPL do cli/for
      * @param array<string,array<string,mixed>> $complMap
      */
     private function processFcfoRow(
         array $fcfo,
         array $contatos,
         array $defRows,
+        array $fcfoCompl,
         array $complMap,
         RmImportOptions $options,
         RmImportReport $report,
@@ -267,7 +273,7 @@ class RmImportService
                     $report->backfillCentroCusto++;
                 }
 
-                $this->backfillCamposRm($clientId, $fcfo, $options, $report);
+                $this->backfillCamposRm($clientId, $fcfo, $fcfoCompl, $options, $report);
 
                 $site = $this->resolveSite($fcfo, $report);
 
@@ -276,7 +282,7 @@ class RmImportService
                 }
             }
         } else {
-            $clientId = $this->createClient($fcfo, $digits, $defRows, $options, $report);
+            $clientId = $this->createClient($fcfo, $digits, $defRows, $fcfoCompl, $options, $report);
         }
 
         $this->rmSeenDigits[$digits] = true;
@@ -294,11 +300,12 @@ class RmImportService
         array $fcfo,
         string $digits,
         array $defRows,
+        array $fcfoCompl,
         RmImportOptions $options,
         RmImportReport $report,
     ): int {
         $cc = $this->resolveCentroCusto($fcfo, $defRows, $report);
-        $attrs = $this->buildClientAttributes($fcfo, $digits, $report);
+        $attrs = $this->buildClientAttributes($fcfo, $digits, $fcfoCompl, $report);
         $enderecos = $this->buildEnderecos($fcfo);
         $site = $this->resolveSite($fcfo, $report);
 
@@ -385,7 +392,7 @@ class RmImportService
      * @param array<string,mixed> $fcfo
      * @return array<string,mixed>
      */
-    private function buildClientAttributes(array $fcfo, string $digits, RmImportReport $report): array
+    private function buildClientAttributes(array $fcfo, string $digits, array $fcfoCompl, RmImportReport $report): array
     {
         $isPf = strlen($digits) === 11;
 
@@ -462,7 +469,7 @@ class RmImportService
                 $fcfo['CODCOLIGADA'] ?? '?',
                 trim((string) ($fcfo['CODCFO'] ?? '?')),
             ),
-        ] + $this->buildCamposRm($fcfo);
+        ] + $this->buildCamposRm($fcfo, $fcfoCompl);
 
         // clients.status é tinyint(1) NOT NULL default 1: grava booleano de verdade e,
         // quando o RM não informa ATIVO, deixa o default do banco valer.
@@ -492,10 +499,15 @@ class RmImportService
      * @param array<string,mixed> $fcfo
      * @return array<string,string|null> colunas de CLIENT_RM_COLUMNS
      */
-    private function buildCamposRm(array $fcfo): array
+    private function buildCamposRm(array $fcfo, array $fcfoCompl): array
     {
         return [
             'categoria' => Normalizer::limit($this->resolveTipoCliFor($fcfo), 100),
+            // Siglas do RM sem dicionário na origem (OK, CA, FL, LE...): entram
+            // como vieram. O par STATUS+OCORRENCIA = 'OK' é o recorte de
+            // "cadastro em ordem" que a secretaria usava nos relatórios.
+            'situacao_abac' => Normalizer::limit((string) ($fcfoCompl['STATUS'] ?? ''), 100),
+            'ocorrencia_abac' => Normalizer::limit((string) ($fcfoCompl['OCORRENCIA'] ?? ''), 20),
             'num_filiacao_abac' => Normalizer::limit((string) ($fcfo['CAMPOALFAOP2'] ?? ''), 50),
             'dt_filiacao_abac' => Normalizer::toDateOrNull($fcfo['DATAOP2'] ?? null),
             'num_filiacao_sinac' => Normalizer::limit((string) ($fcfo['CAMPOALFAOP3'] ?? ''), 50),
@@ -535,13 +547,14 @@ class RmImportService
     private function backfillCamposRm(
         int $clientId,
         array $fcfo,
+        array $fcfoCompl,
         RmImportOptions $options,
         RmImportReport $report,
     ): void {
         $atuais = $this->camposRmAtuais[$clientId] ?? [];
         $update = [];
 
-        foreach ($this->buildCamposRm($fcfo) as $coluna => $valor) {
+        foreach ($this->buildCamposRm($fcfo, $fcfoCompl) as $coluna => $valor) {
             $atual = $atuais[$coluna] ?? null;
 
             if ($valor === null || trim((string) $atual) !== '') {
@@ -1082,15 +1095,24 @@ class RmImportService
             }
 
             if (! $options->dryRun) {
-                ClientComite::create([
-                    'client_id' => $clientId,
-                    'contato_id' => $contatoId,
-                    'comite_nome' => $nome,
-                    'papel' => $papel,
-                    'observacoes' => $papel === 'titular'
-                        ? 'Importado do TOTVS RM — papel não informado na origem.'
-                        : 'Importado do TOTVS RM.',
-                ]);
+                try {
+                    ClientComite::create([
+                        'client_id' => $clientId,
+                        'contato_id' => $contatoId,
+                        'comite_nome' => $nome,
+                        'papel' => $papel,
+                        'observacoes' => $papel === 'titular'
+                            ? 'Importado do TOTVS RM — papel não informado na origem.'
+                            : 'Importado do TOTVS RM.',
+                    ]);
+                } catch (UniqueConstraintViolationException) {
+                    // Outra execução da carga criou o mesmo vínculo: o dedup em
+                    // memória é por processo, o índice único é que garante a
+                    // regra. Nada a fazer — o vínculo já existe.
+                    $this->comitesExistentes[$chave] = true;
+
+                    continue;
+                }
             }
 
             $this->comitesExistentes[$chave] = true;
