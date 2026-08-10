@@ -48,6 +48,14 @@ interface RmReaderInterface
     public function allCentrosCusto(): array;
 
     /**
+     * Tipos de cli/for (FTCF) — a taxonomia apontada por FCFO.CODCOLTCF+CODTCF,
+     * onde vivem CAT ESPECIAL / CAT ESPECIAL 2.
+     *
+     * @return list<array<string,mixed>> todas as linhas de FTCF
+     */
+    public function allTiposCliFor(): array;
+
+    /**
      * Colunas de FCFOCONTATOCOMPL fora do conjunto padrão (chaves + REC*).
      * Tabela ausente => lista vazia (campos complementares são custom por instalação).
      *

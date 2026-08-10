@@ -1,7 +1,6 @@
 ﻿tabela_mysql;coluna;motivo;observacao
 clients;cod_omie;Identificador do cliente na Omie e nao no RM;Clientes novos ficam sem cod_omie ate serem integrados na Omie
-clients;classificacao;Campo do negocio ABAC sem equivalente nas 5 tabelas do RM;RM possui CODTCF (tipo de cli/for) mas a tabela FTCF esta fora do escopo
-clients;categoria;Campo do negocio ABAC sem equivalente no RM;
+clients;classificacao;Sub Categoria do app sem equivalente no RM;A taxonomia FTCF (CODTCF) alimenta clients.categoria - nao ha um segundo nivel na origem
 clients;regional;Conceito de regional da ABAC nao existe no RM;Poderia ser derivado da UF no futuro se o negocio definir a regra
 clients;associado_abac;Situacao associativa nao existe no RM;Vem do legado (clients:backfill-legado) e do WordPress (associados:sync) - a carga do RM nunca escreve nesta coluna
 clients;situacao_abac;Situacao ABAC nao existe no RM;
@@ -36,11 +35,6 @@ clients;obs_sinac_juridico;Campo juridico do app sem equivalente no RM;
 clients;created_by;Importacao automatica sem usuario logado;FK nullable para users
 clients;updated_by;Importacao automatica sem usuario logado;FK nullable para users
 client_contatos;user_id;Importacao automatica sem usuario logado;FK nullable para users
-client_contatos;celular;FCFOCONTATO nao possui campo de celular;TELEFONE e FAX ja mapeados para telefone e telefone_2
-client_contatos;departamento;FCFOCONTATO nao possui departamento;FUNCAO ja mapeada para funcao
-client_contatos;outro_departamento;FCFOCONTATO nao possui departamento;
-client_contatos;representante_legal;RM nao indica representante legal do contato;Fica null para nao gravar valor incorreto (model casta para boolean)
-client_contatos;comite;Comites sao conceito do app e nao existem no RM;
 client_opcionais;(tabela inteira);Os campos opcionais do RM (site, numeros e datas ABAC/SINAC) vao para colunas de clients e client_redes_sociais;Tabela nao populada pela importacao
 client_socios;(tabela inteira);Socios e administradores nao constam nas 5 tabelas importadas do RM;Existem em outras tabelas do RM fora do escopo atual
 client_juridico_contatos;(tabela inteira);Contatos juridicos sao conceito do app sem equivalente no RM;Tabela nao populada pela importacao

@@ -48,7 +48,25 @@ final class RmImportReport
         'num_filiacao_sinac' => 0,
         'dt_filiacao_sinac' => 0,
         'dt_abertura_empresa' => 0,
+        'categoria' => 0,
     ];
+
+    /**
+     * Idem para client_contatos: colunas completadas em contato que já existia.
+     *
+     * @var array<string,int>
+     */
+    public array $backfillContato = [
+        'dt_nascimento' => 0,
+        'aniversario' => 0,
+        'celular' => 0,
+        'departamento' => 0,
+        'outro_departamento' => 0,
+        'representante_legal' => 0,
+        'comite' => 0,
+    ];
+
+    public int $comitesCriados = 0;
 
     public int $emailsExcedentes = 0;
 
@@ -98,6 +116,15 @@ final class RmImportReport
             ['Nº filiação SINAC preenchido (existentes)', $this->backfillCampos['num_filiacao_sinac']],
             ['Data de filiação SINAC preenchida (existentes)', $this->backfillCampos['dt_filiacao_sinac']],
             ['Data de abertura preenchida (existentes)', $this->backfillCampos['dt_abertura_empresa']],
+            ['Categoria preenchida (existentes)', $this->backfillCampos['categoria']],
+            ['Vínculos de comitê criados', $this->comitesCriados],
+            ['Contatos: nascimento preenchido (existentes)', $this->backfillContato['dt_nascimento']],
+            ['Contatos: aniversário preenchido (existentes)', $this->backfillContato['aniversario']],
+            ['Contatos: celular preenchido (existentes)', $this->backfillContato['celular']],
+            ['Contatos: departamento preenchido (existentes)', $this->backfillContato['departamento']],
+            ['Contatos: outros departamentos (existentes)', $this->backfillContato['outro_departamento']],
+            ['Contatos: representante legal (existentes)', $this->backfillContato['representante_legal']],
+            ['Contatos: marcados em comitê (existentes)', $this->backfillContato['comite']],
             ['E-mails excedentes (sem coluna livre)', $this->emailsExcedentes],
             ['Erros (linhas puladas por falha)', $this->erros],
             ['Warnings registrados', count($this->warnings) + $this->warningsSuprimidos],
@@ -125,6 +152,8 @@ final class RmImportReport
             'redes_sociais_criadas' => $this->redesSociaisCriadas,
             'sites_invalidos' => $this->sitesInvalidos,
             'backfill_campos' => $this->backfillCampos,
+            'backfill_contato' => $this->backfillContato,
+            'comites_criados' => $this->comitesCriados,
             'emails_excedentes' => $this->emailsExcedentes,
             'erros' => $this->erros,
             'warnings' => $this->warnings,

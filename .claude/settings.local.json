@@ -59,7 +59,8 @@
       "Bash(./vendor/bin/phpunit tests/Feature/Rm)",
       "Bash(./vendor/bin/phpunit)",
       "Bash(python3 -)",
-      "Bash(git --no-pager diff --stat)"
+      "Bash(git --no-pager diff --stat)",
+      "Bash(git --no-pager log --oneline -4)"
     ]
   }
 }

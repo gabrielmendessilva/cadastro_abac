@@ -16,6 +16,8 @@ class ClientContactController extends Controller
             'nome' => ['required', 'string', 'max:255'],
             'funcao' => ['nullable', 'string', 'max:255'],
             'dt_nascimento' => ['nullable', 'date'],
+            // Aniversário é dia/mês, sem ano — o RM não guarda o ano na maioria.
+            'aniversario' => ['nullable', 'string', 'regex:/^(0[1-9]|[12]\d|3[01])\/(0[1-9]|1[0-2])$/'],
             'email' => ['nullable', 'email', 'max:255'],
             'email_2' => ['nullable', 'email', 'max:255'],
             'telefone' => ['nullable', 'string', 'max:30'],
@@ -24,6 +26,7 @@ class ClientContactController extends Controller
             'celular' => ['nullable', 'string', 'max:30'],
             'obs' => ['nullable', 'string'],
             'departamento' => ['nullable', 'string', 'max:255'],
+            'outro_departamento' => ['nullable', 'string', 'max:255'],
             'representante_legal' => ['nullable', 'boolean'],
             'comite' => ['nullable', 'boolean'],
             'unlock_whatsApp' => ['nullable', 'boolean'],
@@ -51,6 +54,8 @@ class ClientContactController extends Controller
             'nome' => ['required', 'string', 'max:255'],
             'funcao' => ['nullable', 'string', 'max:255'],
             'dt_nascimento' => ['nullable', 'date'],
+            // Aniversário é dia/mês, sem ano — o RM não guarda o ano na maioria.
+            'aniversario' => ['nullable', 'string', 'regex:/^(0[1-9]|[12]\d|3[01])\/(0[1-9]|1[0-2])$/'],
             'email' => ['nullable', 'email', 'max:255'],
             'email_2' => ['nullable', 'email', 'max:255'],
             'telefone' => ['nullable', 'string', 'max:30'],
@@ -59,6 +64,7 @@ class ClientContactController extends Controller
             'celular' => ['nullable', 'string', 'max:30'],
             'obs' => ['nullable', 'string'],
             'departamento' => ['nullable', 'string', 'max:255'],
+            'outro_departamento' => ['nullable', 'string', 'max:255'],
             'representante_legal' => ['nullable', 'boolean'],
             'comite' => ['nullable', 'boolean'],
             'unlock_whatsApp' => ['nullable', 'boolean'],

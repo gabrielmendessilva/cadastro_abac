@@ -43,6 +43,7 @@ class RmImportServiceTest extends TestCase
                 $t->date('dt_filiacao_sinac')->nullable();
                 // NOT NULL default 0 no banco vivo, como associado_sinac.
                 $t->boolean('associado_abac')->default(false);
+                $t->string('categoria', 100)->nullable();
                 $t->text('emails_boletos')->nullable();
                 $t->text('obs_cadastro')->nullable();
                 // extensões legadas (migration 2026_07_21_000040)
@@ -70,6 +71,7 @@ class RmImportServiceTest extends TestCase
                 $t->string('nome')->nullable();
                 $t->string('funcao')->nullable();
                 $t->string('dt_nascimento')->nullable();
+                $t->string('aniversario', 5)->nullable();
                 $t->string('email')->nullable();
                 $t->string('email_2')->nullable();
                 $t->string('telefone')->nullable();
@@ -118,6 +120,39 @@ class RmImportServiceTest extends TestCase
                 $t->string('responsavel', 120)->nullable();
                 $t->timestamps();
                 $t->unique(['client_id', 'codigo']);
+            });
+        }
+
+        if (! Schema::hasTable('comites')) {
+            Schema::create('comites', function ($t) {
+                $t->id();
+                $t->string('nome', 150);
+                $t->string('descricao', 500)->nullable();
+                $t->boolean('ativo')->default(true);
+                $t->timestamps();
+            });
+
+            // Mesmo vocabulário oficial do banco vivo (ListasDominioSeeder).
+            foreach ([
+                'Comitê Antifraudes', 'Comitê Compliance e Auditoria Interna', 'Comitê Contábil',
+                'Comitê Crédito e Cobrança', 'Comitê Estudos Econômicos', 'Comitê Gestão de Grupos',
+                'Comitê Gestão de Pessoas', 'Comitê Inovação', 'Comitê Internacional', 'Comitê Jurídico',
+                'Comitê Marketing Institucional', 'Comitê Ouvidoria', 'Comitê Política de Parceiros',
+                'Comitê Tecnologia da Informação',
+            ] as $nome) {
+                DB::table('comites')->insert(['nome' => $nome, 'ativo' => true, 'created_at' => now(), 'updated_at' => now()]);
+            }
+        }
+
+        if (! Schema::hasTable('client_comites')) {
+            Schema::create('client_comites', function ($t) {
+                $t->id();
+                $t->unsignedBigInteger('client_id');
+                $t->unsignedBigInteger('contato_id')->nullable();
+                $t->string('comite_nome');
+                $t->string('papel')->default('titular');
+                $t->text('observacoes')->nullable();
+                $t->timestamps();
             });
         }
 
@@ -197,6 +232,9 @@ class RmImportServiceTest extends TestCase
             'CAMPOALFAOP3' => '358',
             'DATAOP3' => '1989-03-01 00:00:00.000',
             'DATAOP1' => '1987-10-28 00:00:00.000',
+            // Tipo de cli/for (FTCF) — vira clients.categoria.
+            'CODCOLTCF' => 1,
+            'CODTCF' => 'CAT ESPECIAL',
             'RUA' => 'Av. Paulista',
             'NUMERO' => '1000',
             'COMPLEMENTO' => 'cj 101',
@@ -296,6 +334,8 @@ class RmImportServiceTest extends TestCase
         $this->assertSame('1989-03-01', $client->dt_filiacao_sinac->format('Y-m-d'));
         // DATAOP1 prevalece sobre DTINICATIVIDADES (2010-05-10).
         $this->assertSame('1987-10-28', $client->dt_abertura_empresa->format('Y-m-d'));
+        // Sem linha na FTCF, a categoria fica com o próprio código do tipo.
+        $this->assertSame('CAT ESPECIAL', $client->categoria);
         $this->assertSame('Observação livre do RM', $client->notes);
         $this->assertStringContainsString('coligada 1, código 000123', $client->obs_cadastro);
         // O RM não tem regional: nada é inventado para regional_id.
@@ -322,7 +362,9 @@ class RmImportServiceTest extends TestCase
         $contato = DB::table('client_contatos')->where('client_id', $client->id)->first();
         $this->assertNotNull($contato);
         $this->assertSame('maria@x.com', $contato->email);
-        $this->assertSame('(11) 3333-3333', $contato->telefone_2);
+        // FAX do RM é celular nesta base, não um segundo telefone.
+        $this->assertSame('(11) 3333-3333', $contato->celular);
+        $this->assertNull($contato->telefone_2);
         $this->assertStringStartsWith('1990-01-02', (string) $contato->dt_nascimento);
 
         // withoutEvents: o ClientObserver não pode ter gerado auditoria.
@@ -444,7 +486,7 @@ class RmImportServiceTest extends TestCase
         $this->assertSame(0, $second->centrosCustoCriados);
         $this->assertSame(0, $second->backfillCentroCusto);
         $this->assertSame(0, $second->redesSociaisCriadas);
-        $this->assertSame([0, 0, 0, 0, 0], array_values($second->backfillCampos));
+        $this->assertSame([0, 0, 0, 0, 0, 0], array_values($second->backfillCampos));
 
         $this->assertSame(1, DB::table('clients')->count());
         $this->assertSame(1, DB::table('client_contatos')->count());
@@ -556,6 +598,7 @@ class RmImportServiceTest extends TestCase
             'num_filiacao_sinac' => 1,
             'dt_filiacao_sinac' => 1,
             'dt_abertura_empresa' => 0,
+            'categoria' => 1,
         ], $report->backfillCampos);
 
         $row = DB::table('clients')->where('id', $clientId)->first();
@@ -622,7 +665,8 @@ class RmImportServiceTest extends TestCase
         $report = $this->service(new FakeRmReader(fcfo: [$this->fcfoRow()]))
             ->run($this->importOptions(backfill: false));
 
-        $this->assertSame([0, 0, 0, 0, 0], array_values($report->backfillCampos));
+        $this->assertSame([0, 0, 0, 0, 0, 0], array_values($report->backfillCampos));
+        $this->assertSame([0, 0, 0, 0, 0, 0, 0], array_values($report->backfillContato));
         $this->assertSame(0, $report->redesSociaisCriadas);
         $this->assertNull(DB::table('clients')->value('num_filiacao_abac'));
         $this->assertSame(0, DB::table('client_redes_sociais')->count());
@@ -724,6 +768,187 @@ class RmImportServiceTest extends TestCase
         // ATIVO ausente no RM: a coluna NOT NULL cai no default do banco (1).
         $semInfo = Client::query()->where('document', '04.124.922/0001-61')->firstOrFail();
         $this->assertTrue($semInfo->status);
+    }
+
+    /** @param array<string,mixed> $compl */
+    private function readerComCompl(array $compl, array $contatoOverrides = []): FakeRmReader
+    {
+        return new FakeRmReader(
+            fcfo: [$this->fcfoRow()],
+            contatos: [$this->contatoRow($contatoOverrides + ['IDCONTATO' => 7])],
+            complColumns: ['DEPTO', 'ANIV', 'OUTROS', 'REPRESENTANTE', 'COMITE'],
+            compl: ['1|000123|7' => ['CODCOLIGADA' => 1, 'CODCFO' => '000123', 'IDCONTATO' => 7] + $compl],
+        );
+    }
+
+    public function test_campos_do_contato_vao_para_colunas_proprias(): void
+    {
+        $reader = $this->readerComCompl([
+            'DEPTO' => 'DIRETORIA',
+            'ANIV' => null,
+            'OUTROS' => 'ADMINISTRATIVO, INFORMATICA',
+            'REPRESENTANTE' => 'S',
+            'COMITE' => 'JURÍDICO',
+        ], ['OBSERVACAO' => '16/09']);
+
+        $report = $this->service($reader)->run($this->importOptions());
+
+        $this->assertSame(1, $report->contatosCriados);
+
+        $contato = DB::table('client_contatos')->firstOrFail();
+        $this->assertSame('DIRETORIA', $contato->departamento);
+        $this->assertSame('ADMINISTRATIVO, INFORMATICA', $contato->outro_departamento);
+        $this->assertSame('16/09', $contato->aniversario);
+        $this->assertSame('(11) 3333-3333', $contato->celular);
+        $this->assertSame(1, (int) $contato->representante_legal);
+        $this->assertSame(1, (int) $contato->comite);
+        // O aniversário saiu do texto livre: obs não repete o "16/09".
+        $this->assertStringNotContainsString('16/09', (string) $contato->obs);
+        // Campos com coluna própria também não são mais despejados no obs.
+        $this->assertStringNotContainsString('DEPTO:', (string) $contato->obs);
+
+        // Comitê vira vínculo em client_comites, com o nome oficial da lista.
+        $this->assertSame(1, $report->comitesCriados);
+        $comite = DB::table('client_comites')->firstOrFail();
+        $this->assertSame('Comitê Jurídico', $comite->comite_nome);
+        $this->assertSame($contato->id, $comite->contato_id);
+        $this->assertSame('titular', $comite->papel);
+    }
+
+    /**
+     * O RM escreve o nome do comitê à mão: grafias, acentos e plural variam, e
+     * mais de um vem separado por "/". A lista de domínio do app é o vocabulário.
+     */
+    public function test_nomes_de_comite_do_rm_casam_com_a_lista_de_dominio(): void
+    {
+        $reader = $this->readerComCompl(['COMITE' => 'ANTIFRAUDE/CREDITO E COBRANCA/MARKETING/COMITE CONTABIL/XPTO']);
+
+        $report = $this->service($reader)->run($this->importOptions());
+
+        $this->assertSame(5, $report->comitesCriados);
+        $this->assertSame([
+            'Comitê Antifraudes',           // plural tolerado
+            'Comitê Crédito e Cobrança',    // acento resolvido
+            'Comitê Marketing Institucional', // prefixo único
+            'Comitê Contábil',              // prefixo "COMITE " removido
+            'XPTO',                         // fora da lista: mantém o nome do RM
+        ], DB::table('client_comites')->orderBy('id')->pluck('comite_nome')->all());
+    }
+
+    /** O RM escreve o papel junto do nome quando é coordenação. */
+    public function test_coordenadora_no_nome_vira_papel_do_comite(): void
+    {
+        $reader = $this->readerComCompl(['COMITE' => 'COORDENADORA COMITE ANTIFRAUDES/OUVIDORIA']);
+
+        $this->service($reader)->run($this->importOptions());
+
+        $vinculos = DB::table('client_comites')->orderBy('id')->get(['comite_nome', 'papel']);
+        $this->assertSame('Comitê Antifraudes', $vinculos[0]->comite_nome);
+        $this->assertSame('coordenador', $vinculos[0]->papel);
+        $this->assertSame('Comitê Ouvidoria', $vinculos[1]->comite_nome);
+        $this->assertSame('titular', $vinculos[1]->papel);
+    }
+
+    /** Quando COMITE está vazio, o mesmo dado costuma estar em OUTROS. */
+    public function test_outros_com_nome_de_comite_nao_vira_departamento(): void
+    {
+        $reader = $this->readerComCompl(['COMITE' => null, 'OUTROS' => 'COMITÊ OUVIDORIA']);
+
+        $report = $this->service($reader)->run($this->importOptions());
+
+        $this->assertSame(1, $report->comitesCriados);
+        $this->assertSame('Comitê Ouvidoria', DB::table('client_comites')->value('comite_nome'));
+        $this->assertNull(DB::table('client_contatos')->value('outro_departamento'));
+        $this->assertSame(1, (int) DB::table('client_contatos')->value('comite'));
+    }
+
+    /**
+     * Todos os contatos da base já existem (a carga original os criou), então sem
+     * backfill de contato nada destes campos novos chegaria ao app.
+     */
+    public function test_contato_existente_recebe_campos_novos_sem_perder_o_que_ja_tinha(): void
+    {
+        $clientId = DB::table('clients')->insertGetId([
+            'name' => 'CLIENTE', 'document' => '12.345.678/0001-95',
+            'created_at' => now(), 'updated_at' => now(),
+        ]);
+        $contatoId = DB::table('client_contatos')->insertGetId([
+            'client_id' => $clientId,
+            'nome' => 'Maria Souza',
+            'email' => 'maria@x.com',
+            'departamento' => 'JA PREENCHIDO',   // não pode ser sobrescrito
+            'created_at' => '2020-01-01 00:00:00',
+            'updated_at' => '2020-01-01 00:00:00',
+        ]);
+
+        $reader = $this->readerComCompl([
+            'DEPTO' => 'DIRETORIA',
+            'OUTROS' => null,
+            'REPRESENTANTE' => 'S',
+            'COMITE' => 'OUVIDORIA',
+        ], ['OBSERVACAO' => '16/09']);
+
+        $report = $this->service($reader)->run($this->importOptions());
+
+        $this->assertSame(0, $report->contatosCriados);
+        $this->assertSame(1, $report->contatosPuladosEmail);
+        $this->assertSame(0, $report->backfillContato['departamento']);
+        $this->assertSame(1, $report->backfillContato['celular']);
+        $this->assertSame(1, $report->backfillContato['aniversario']);
+        $this->assertSame(1, $report->backfillContato['representante_legal']);
+
+        $contato = DB::table('client_contatos')->where('id', $contatoId)->first();
+        $this->assertSame('JA PREENCHIDO', $contato->departamento);
+        $this->assertSame('16/09', $contato->aniversario);
+        $this->assertSame('(11) 3333-3333', $contato->celular);
+        $this->assertStringStartsWith('1990-01-02', (string) $contato->dt_nascimento);
+        $this->assertSame('Maria Souza', $contato->nome);
+        // Backfill não é edição de usuário: nome, obs e updated_at intocados.
+        $this->assertSame('2020-01-01 00:00:00', (string) $contato->updated_at);
+
+        $this->assertSame(1, DB::table('client_comites')->where('contato_id', $contatoId)->count());
+    }
+
+    public function test_backfill_de_contato_nao_duplica_comite_em_reexecucao(): void
+    {
+        $make = fn (): FakeRmReader => $this->readerComCompl(['COMITE' => 'OUVIDORIA/INOVACAO']);
+
+        $this->service($make())->run($this->importOptions());
+        $segundo = $this->service($make())->run($this->importOptions());
+
+        $this->assertSame(0, $segundo->comitesCriados);
+        $this->assertSame(2, DB::table('client_comites')->count());
+        $this->assertSame([0, 0, 0, 0, 0, 0, 0], array_values($segundo->backfillContato));
+    }
+
+    /** A descrição da FTCF é o rótulo que vale; o código é só a chave. */
+    public function test_categoria_usa_a_descricao_do_tipo_de_clifor(): void
+    {
+        $reader = new FakeRmReader(
+            fcfo: [$this->fcfoRow(['CODCOLTCF' => 1, 'CODTCF' => 'ADM SEM AUTORIZACAO'])],
+            tiposCliFor: [
+                ['CODCOLIGADA' => 1, 'CODTCF' => 'ADM SEM AUTORIZACAO', 'DESCRICAO' => 'ADMINISTRADORA SEM AUTORIZACAO'],
+            ],
+        );
+
+        $this->service($reader)->run($this->importOptions());
+
+        $this->assertSame('ADMINISTRADORA SEM AUTORIZACAO', DB::table('clients')->value('categoria'));
+    }
+
+    /** A carga escreve em colunas de migration — falha com recado, não com SQL cru. */
+    public function test_destino_sem_a_coluna_aniversario_falha_com_mensagem_clara(): void
+    {
+        Schema::table('client_contatos', fn ($t) => $t->dropColumn('aniversario'));
+
+        try {
+            $this->expectException(\App\Services\Rm\Exceptions\RmImportException::class);
+            $this->expectExceptionMessageMatches('/aniversario.*migrate/s');
+
+            $this->service(new FakeRmReader(fcfo: [$this->fcfoRow()]))->run($this->importOptions());
+        } finally {
+            Schema::table('client_contatos', fn ($t) => $t->string('aniversario', 5)->nullable());
+        }
     }
 
     public function test_campos_complementares_do_contato_vao_para_obs(): void

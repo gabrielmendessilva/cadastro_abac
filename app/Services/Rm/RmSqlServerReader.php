@@ -24,6 +24,8 @@ class RmSqlServerReader implements RmReaderInterface
         'PESSOAFISOUJUR', 'EMAIL', 'EMAILFISCAL', 'EMAILPGTO', 'EMAILENTREGA',
         'TELEFONE', 'TELEX', 'CONTATO', 'INSCRESTADUAL', 'INSCRMUNICIPAL',
         'CIDENTIDADE', 'DTNASCIMENTO', 'DTINICATIVIDADES', 'RAMOATIV', 'CAMPOLIVRE',
+        // Tipo de cli/for (FTCF): a taxonomia que traz CAT ESPECIAL / CAT ESPECIAL 2.
+        'CODCOLTCF', 'CODTCF',
         // Campos livres da aba "Opcionais" do RM, usados pela ABAC para site,
         // filiação ABAC/SINAC e data de abertura da empresa.
         'CAMPOALFAOP1', 'CAMPOALFAOP2', 'CAMPOALFAOP3', 'DATAOP1', 'DATAOP2', 'DATAOP3',
@@ -66,6 +68,7 @@ class RmSqlServerReader implements RmReaderInterface
             'FCFOCONTATO' => self::FCFOCONTATO_COLUMNS,
             'FCFODEF' => ['CODCOLIGADA', 'CODCOLCFO', 'CODCFO', 'CODCCUSTO'],
             'GCCUSTO' => self::GCCUSTO_COLUMNS,
+            'FTCF' => ['CODCOLIGADA', 'CODTCF', 'DESCRICAO'],
         ];
 
         $found = $this->columnsByTable(array_keys($required));
@@ -172,6 +175,16 @@ class RmSqlServerReader implements RmReaderInterface
         return $this->connection->table($this->qualify('GCCUSTO'))
             ->select(self::GCCUSTO_COLUMNS)
             ->orderBy('CODCOLIGADA')->orderBy('CODCCUSTO')
+            ->get()
+            ->map(static fn (object $row): array => (array) $row)
+            ->all();
+    }
+
+    public function allTiposCliFor(): array
+    {
+        return $this->connection->table($this->qualify('FTCF'))
+            ->select(['CODCOLIGADA', 'CODTCF', 'DESCRICAO'])
+            ->orderBy('CODCOLIGADA')->orderBy('CODTCF')
             ->get()
             ->map(static fn (object $row): array => (array) $row)
             ->all();

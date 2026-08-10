@@ -697,7 +697,12 @@
                                 <tbody class="divide-y divide-slate-100 bg-white">
                                     @forelse($contacts as $contact)
                                         <tr>
-                                            <td class="px-4 py-3 text-sm text-slate-700">{{ $contact->nome ?: '-' }}</td>
+                                            <td class="px-4 py-3 text-sm text-slate-700">
+                                                {{ $contact->nome ?: '-' }}
+                                                @if($contact->aniversario)
+                                                    <div class="text-xs text-slate-500">🎂 {{ $contact->aniversario }}</div>
+                                                @endif
+                                            </td>
                                             <td class="px-4 py-3 text-sm text-slate-700">{{ $contact->funcao ?: '-' }}</td>
                                             <td class="px-4 py-3 text-sm text-slate-700">{{ $contact->email ?: '-' }}</td>
                                             <td class="px-4 py-3 text-sm text-slate-700">
@@ -706,7 +711,12 @@
                                                     <div class="text-xs text-slate-500">{{ $contact->telefone_2 }}</div>
                                                 @endif
                                             </td>
-                                            <td class="px-4 py-3 text-sm text-slate-700">{{ $contact->departamento ?: '-' }}</td>
+                                            <td class="px-4 py-3 text-sm text-slate-700">
+                                                {{ $contact->departamento ?: '-' }}
+                                                @if($contact->outro_departamento)
+                                                    <div class="text-xs text-slate-500">{{ $contact->outro_departamento }}</div>
+                                                @endif
+                                            </td>
                                             <td class="px-4 py-3 text-sm text-slate-700">
                                                 <div class="flex flex-wrap gap-1">
                                                     @if($contact->representante_legal)
@@ -777,6 +787,10 @@
                                                 <label class="mb-1 block text-sm font-medium text-slate-700">Nascimento</label>
                                                 <input type="date" name="dt_nascimento" class="w-full rounded-xl border border-slate-300 px-4 py-2.5 text-sm">
                                             </div>
+                                            <div>
+                                                <label class="mb-1 block text-sm font-medium text-slate-700">Aniversário</label>
+                                                <input type="text" name="aniversario" placeholder="dd/mm" maxlength="5" class="w-full rounded-xl border border-slate-300 px-4 py-2.5 text-sm">
+                                            </div>
                                             <div class="xl:col-span-2">
                                                 <label class="mb-1 block text-sm font-medium text-slate-700">E-mail</label>
                                                 <input type="email" name="email" class="w-full rounded-xl border border-slate-300 px-4 py-2.5 text-sm">
@@ -804,6 +818,10 @@
                                             <div class="md:col-span-2">
                                                 <label class="mb-1 block text-sm font-medium text-slate-700">Departamento</label>
                                                 <input type="text" name="departamento" class="w-full rounded-xl border border-slate-300 px-4 py-2.5 text-sm">
+                                            </div>
+                                            <div class="md:col-span-2">
+                                                <label class="mb-1 block text-sm font-medium text-slate-700">Outros departamentos</label>
+                                                <input type="text" name="outro_departamento" class="w-full rounded-xl border border-slate-300 px-4 py-2.5 text-sm">
                                             </div>
                                             <div class="xl:col-span-4">
                                                 <label class="mb-1 block text-sm font-medium text-slate-700">Observação</label>
@@ -863,6 +881,10 @@
                                                     <label class="mb-1 block text-sm font-medium text-slate-700">Nascimento</label>
                                                     <input type="date" name="dt_nascimento" value="{{ $contact->dt_nascimento ? \Carbon\Carbon::parse($contact->dt_nascimento)->format('Y-m-d') : '' }}" class="w-full rounded-xl border border-slate-300 px-4 py-2.5 text-sm">
                                                 </div>
+                                                <div>
+                                                    <label class="mb-1 block text-sm font-medium text-slate-700">Aniversário</label>
+                                                    <input type="text" name="aniversario" value="{{ $contact->aniversario }}" placeholder="dd/mm" maxlength="5" class="w-full rounded-xl border border-slate-300 px-4 py-2.5 text-sm">
+                                                </div>
                                                 <div class="xl:col-span-2">
                                                     <label class="mb-1 block text-sm font-medium text-slate-700">E-mail</label>
                                                     <input type="email" name="email" value="{{ $contact->email }}" class="w-full rounded-xl border border-slate-300 px-4 py-2.5 text-sm">
@@ -890,6 +912,10 @@
                                                 <div class="md:col-span-2">
                                                     <label class="mb-1 block text-sm font-medium text-slate-700">Departamento</label>
                                                     <input type="text" name="departamento" value="{{ $contact->departamento }}" class="w-full rounded-xl border border-slate-300 px-4 py-2.5 text-sm">
+                                                </div>
+                                                <div class="md:col-span-2">
+                                                    <label class="mb-1 block text-sm font-medium text-slate-700">Outros departamentos</label>
+                                                    <input type="text" name="outro_departamento" value="{{ $contact->outro_departamento }}" class="w-full rounded-xl border border-slate-300 px-4 py-2.5 text-sm">
                                                 </div>
                                                 <div class="xl:col-span-4">
                                                     <label class="mb-1 block text-sm font-medium text-slate-700">Observação</label>
