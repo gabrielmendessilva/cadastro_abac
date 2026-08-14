@@ -23,6 +23,7 @@ return Application::configure(basePath: dirname(__DIR__))
 
         $middleware->alias([
             'root' => \App\Http\Middleware\EnsureUserIsRoot::class,
+            'senha.trocada' => \App\Http\Middleware\EnsurePasswordIsChanged::class,
         ]);
     })
     ->withExceptions(function ($exceptions) {

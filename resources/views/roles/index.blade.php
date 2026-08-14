@@ -61,11 +61,10 @@
                                         {{ $role->name }}
                                     </span>
                                     @if ($role->name !== 'Root')
-                                        <form method="POST" action="{{ route('roles.destroy', $role) }}"
-                                              onsubmit="return confirm('Remover o perfil {{ $role->name }}? Usuários ficarão sem perfil.')">
-                                            @csrf @method('DELETE')
-                                            <button type="submit" class="text-[10px] text-rose-600 hover:underline">remover</button>
-                                        </form>
+                                        {{-- O form de exclusão fica FORA da matriz (forms não podem ser aninhados);
+                                             ligado por form="..." logo abaixo do </form> da matriz. --}}
+                                        <button type="submit" form="del-role-{{ $role->id }}"
+                                                class="text-[10px] text-rose-600 hover:underline">remover</button>
                                     @else
                                         <span class="rounded-full bg-rose-100 px-2 py-0.5 text-[10px] text-rose-700">protegido</span>
                                     @endif
@@ -123,6 +122,18 @@
             </button>
         </div>
     </form>
+
+    {{-- Forms de exclusão de perfil: precisam ficar fora da matriz acima, senão o HTML
+         descarta a tag <form> aninhada e o _method=DELETE vaza para o POST /roles/sync. --}}
+    @foreach ($roles as $role)
+        @if ($role->name !== 'Root')
+            <form id="del-role-{{ $role->id }}" method="POST" action="{{ route('roles.destroy', $role) }}"
+                  class="hidden"
+                  onsubmit="return confirm('Remover o perfil ' + @js($role->name) + '? Usuários ficarão sem perfil.')">
+                @csrf @method('DELETE')
+            </form>
+        @endif
+    @endforeach
 
     {{-- Perfis personalizados (auto-gerados pela tela de permissões do usuário) --}}
     @if ($customRoles->isNotEmpty())

@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>@yield('title', 'Abac')</title>
+    <title>@yield('title', 'Cadastro ABAC')</title>
     @vite(['resources/css/app.css', 'resources/js/app.js'])
     <style>
         [x-cloak] { display: none !important; }
@@ -13,7 +13,7 @@
     <div class="min-h-screen flex">
         <aside class="w-72 bg-slate-900 text-white p-6 hidden lg:block">
             <div class="mb-8">
-                <h1 class="text-2xl font-bold">Abac</h1>
+                <h1 class="text-2xl font-bold">CADASTRO ABAC</h1>
                 <p class="text-slate-400 text-sm mt-2">Cadastro online</p>
             </div>
 

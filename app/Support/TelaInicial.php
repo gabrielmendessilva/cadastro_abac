@@ -17,6 +17,12 @@ final class TelaInicial
     {
         $user ??= auth()->user();
 
+        // Primeiro acesso: nada de sistema antes de trocar a senha temporária
+        // que veio por e-mail (middleware 'senha.trocada' segura o resto).
+        if ($user?->must_change_password) {
+            return route('password.change');
+        }
+
         return $user?->can('clients.view')
             ? route('clients.index', ['associado' => 1])
             : route('dashboard');

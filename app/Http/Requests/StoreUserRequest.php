@@ -3,7 +3,6 @@
 namespace App\Http\Requests;
 
 use Illuminate\Foundation\Http\FormRequest;
-use Illuminate\Validation\Rules\Password;
 
 class StoreUserRequest extends FormRequest
 {
@@ -12,12 +11,15 @@ class StoreUserRequest extends FormRequest
         return true;
     }
 
+    /**
+     * Não existe campo de senha no cadastro: o sistema gera uma senha temporária
+     * e a envia por e-mail (UserController::store).
+     */
     public function rules(): array
     {
         return [
             'name' => ['required', 'string', 'max:255'],
             'email' => ['required', 'email', 'max:255', 'unique:users,email'],
-            'password' => ['required', 'confirmed', Password::min(8)],
             'role' => ['required', 'string', 'exists:roles,name'],
             'status' => ['nullable', 'boolean'],
         ];

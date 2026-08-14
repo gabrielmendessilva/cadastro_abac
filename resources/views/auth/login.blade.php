@@ -27,10 +27,5 @@
 
         <button class="w-full rounded-2xl bg-slate-900 px-4 py-3 text-white font-semibold hover:bg-slate-800">Acessar sistema</button>
     </form>
-
-    <div class="mt-8 rounded-2xl bg-slate-50 p-4 text-sm text-slate-600">
-        <p><strong>Login padrão:</strong> admin@sistema.local</p>
-        <p><strong>Senha:</strong> password</p>
-    </div>
 </div>
 @endsection

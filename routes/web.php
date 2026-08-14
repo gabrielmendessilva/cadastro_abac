@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\AniversarianteController;
 use App\Http\Controllers\Auth\AuthenticatedSessionController;
+use App\Http\Controllers\Auth\PasswordChangeController;
 use App\Http\Controllers\ClientController;
 use App\Http\Controllers\ClientDocumentController;
 use App\Http\Controllers\DashboardController;
@@ -30,9 +31,16 @@ Route::middleware('guest')->group(function () {
     Route::post('/login', [AuthenticatedSessionController::class, 'store'])->name('login.store');
 });
 
+// Fora do 'senha.trocada': é para cá que o middleware manda quem ainda está com
+// a senha temporária do primeiro acesso — e o logout precisa funcionar sempre.
 Route::middleware('auth')->group(function () {
     Route::post('/logout', [AuthenticatedSessionController::class, 'destroy'])->name('logout');
 
+    Route::get('/trocar-senha', [PasswordChangeController::class, 'create'])->name('password.change');
+    Route::post('/trocar-senha', [PasswordChangeController::class, 'store'])->name('password.change.store');
+});
+
+Route::middleware(['auth', 'senha.trocada'])->group(function () {
     Route::get('/dashboard', DashboardController::class)->name('dashboard');
 
     // Consulta CEP (ViaCEP + OpenCEP fallback)
@@ -50,7 +58,8 @@ Route::middleware('auth')->group(function () {
         Route::get('/roles', [RoleController::class, 'index'])->name('roles.index');
         Route::post('/roles', [RoleController::class, 'store'])->name('roles.store');
         Route::post('/roles/sync', [RoleController::class, 'sync'])->name('roles.sync');
-        Route::delete('/roles/{role}', [RoleController::class, 'destroy'])->name('roles.destroy');
+        // whereNumber evita que URIs fixas (ex.: /roles/sync) sejam capturadas pelo wildcard.
+        Route::delete('/roles/{role}', [RoleController::class, 'destroy'])->name('roles.destroy')->whereNumber('role');
 
         // Permissões individuais por usuário
         Route::get('/users/{user}/permissions', [UserController::class, 'permissions'])->name('users.permissions.edit');

@@ -4,9 +4,12 @@ namespace App\Http\Controllers;
 
 use App\Http\Requests\StoreUserRequest;
 use App\Http\Requests\UpdateUserRequest;
+use App\Mail\CredenciaisDeAcesso;
 use App\Models\User;
+use App\Support\SenhaTemporaria;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Mail;
 use Spatie\Permission\Models\Permission;
 use Spatie\Permission\Models\Role;
 
@@ -39,20 +42,47 @@ class UserController extends Controller
         return view('users.create', compact('roles'));
     }
 
+    /**
+     * Cadastra o usuário com uma senha temporária e manda os dados de acesso
+     * por e-mail. A senha em texto só existe dentro deste método — o model
+     * guarda o hash e o usuário é obrigado a trocá-la no primeiro login.
+     */
     public function store(StoreUserRequest $request)
     {
         abort_unless(auth()->user()->can('users.create'), 403);
 
+        $senhaTemporaria = SenhaTemporaria::gerar();
+
         $user = User::create([
             'name' => $request->name,
             'email' => $request->email,
-            'password' => Hash::make($request->password),
+            'password' => $senhaTemporaria, // o cast 'hashed' do model aplica o Hash::make
             'status' => $request->boolean('status', true),
+            'must_change_password' => true,
         ]);
 
         $user->syncRoles([$request->role]);
 
-        return redirect()->route('users.index')->with('success', 'Usuário cadastrado com sucesso.');
+        try {
+            Mail::to($user->email)->send(
+                new CredenciaisDeAcesso($user, $senhaTemporaria, route('login'))
+            );
+        } catch (\Throwable $e) {
+            // O usuário já está criado; sem a senha ninguém entra nele. Devolve a
+            // senha para quem cadastrou repassar por outro canal, em vez de deixar
+            // uma conta morta no sistema.
+            report($e);
+
+            return redirect()->route('users.index')->with(
+                'error',
+                "Usuário cadastrado, mas o e-mail não pôde ser enviado. Repasse a senha temporária a {$user->name}: {$senhaTemporaria}"
+            );
+        }
+
+        return redirect()->route('users.index')->with(
+            'success',
+            "Usuário cadastrado. Os dados de acesso foram enviados para {$user->email}."
+        );
     }
 
     public function show(User $user)
