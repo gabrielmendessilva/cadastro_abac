@@ -8,6 +8,7 @@ use Illuminate\Mail\Mailable;
 use Illuminate\Mail\Mailables\Content;
 use Illuminate\Mail\Mailables\Envelope;
 use Illuminate\Queue\SerializesModels;
+use Illuminate\Support\Str;
 
 /**
  * E-mail de boas-vindas com os dados do primeiro acesso.
@@ -29,7 +30,9 @@ class CredenciaisDeAcesso extends Mailable
     public function envelope(): Envelope
     {
         return new Envelope(
-            subject: 'Seus dados de acesso — '.config('app.name'),
+            // A marca é uma sigla: sai sempre em caixa alta, independente de
+            // como o APP_NAME estiver escrito no .env.
+            subject: 'Seus dados de acesso — '.Str::upper(config('app.name')),
         );
     }
 

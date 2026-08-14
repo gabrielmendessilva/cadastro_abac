@@ -25,7 +25,7 @@
                             <p style="margin:0 0 16px; font-size:16px;">Olá, {{ $user->name }}!</p>
 
                             <p style="margin:0 0 24px; font-size:15px; line-height:1.6; color:#334155;">
-                                Seu acesso ao sistema <strong>{{ config('app.name') }}</strong> foi criado.
+                                Seu acesso ao sistema <strong>{{ Str::upper(config('app.name')) }}</strong> foi criado.
                                 Use os dados abaixo para entrar pela primeira vez.
                             </p>
 

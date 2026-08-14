@@ -49,7 +49,11 @@ class CadastroEnviaCredenciaisTest extends TestCase
             'email' => 'fulano@teste.local',
             'role' => 'Consulta',
             'status' => 1,
-        ])->assertRedirect(route('users.index'));
+        ])
+            ->assertRedirect(route('users.index'))
+            // Falha no envio também redireciona para cá, só que com 'error' —
+            // sem esta asserção o teste passaria com o e-mail estourando.
+            ->assertSessionHas('success');
 
         $novo = User::where('email', 'fulano@teste.local')->firstOrFail();
 
