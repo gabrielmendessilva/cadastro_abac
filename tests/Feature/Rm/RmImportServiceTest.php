@@ -191,13 +191,43 @@ class RmImportServiceTest extends TestCase
         return new RmImportService(reader: $reader, logger: new NullLogger());
     }
 
-    private function importOptions(bool $dryRun = false, bool $backfill = true, int $chunk = 2): RmImportOptions
-    {
+    private function importOptions(
+        bool $dryRun = false,
+        bool $backfill = true,
+        int $chunk = 2,
+        bool $desativarForaDeOrdem = true,
+    ): RmImportOptions {
         return new RmImportOptions(
             dryRun: $dryRun,
             chunkSize: $chunk,
             backfill: $backfill,
+            desativarForaDeOrdem: $desativarForaDeOrdem,
         );
+    }
+
+    /**
+     * Linhas de FCFOCOMPL com o par STATUS/OCORRENCIA em ordem — o recorte que
+     * mantém a empresa ativa no app. Chaves no formato "coligada|codcfo".
+     *
+     * @param list<string> $chaves
+     * @return array<string,array<string,mixed>>
+     */
+    private function fcfoComplEmOrdem(array $chaves): array
+    {
+        $linhas = [];
+
+        foreach ($chaves as $chave) {
+            [$coligada, $codcfo] = explode('|', $chave);
+
+            $linhas[$chave] = [
+                'CODCOLIGADA' => (int) $coligada,
+                'CODCFO' => $codcfo,
+                'STATUS' => 'OK',
+                'OCORRENCIA' => 'OK',
+            ];
+        }
+
+        return $linhas;
     }
 
     /**
@@ -302,6 +332,7 @@ class RmImportServiceTest extends TestCase
                 'CODREDUZIDO' => '101', 'CODCLASSIFICA' => 'A', 'ATIVO' => 1, 'PERMITELANC' => 1,
                 'RESPONSAVEL' => 'Diretoria',
             ]],
+            fcfoCompl: $this->fcfoComplEmOrdem(['1|000123']),
         );
 
         $report = $this->service($reader)->run($this->importOptions());
@@ -760,10 +791,15 @@ class RmImportServiceTest extends TestCase
 
     public function test_status_vira_booleano_e_respeita_o_default_quando_o_rm_nao_informa(): void
     {
-        $reader = new FakeRmReader(fcfo: [
-            $this->fcfoRow(['CODCFO' => 'A1', 'CGCCFO' => '12.345.678/0001-95', 'ATIVO' => 0]),
-            $this->fcfoRow(['CODCFO' => 'A2', 'CGCCFO' => '04.124.922/0001-61', 'ATIVO' => null]),
-        ]);
+        // Os dois com o cadastro em ordem na FCFOCOMPL: aqui quem decide o status
+        // é só o ATIVO da FCFO.
+        $reader = new FakeRmReader(
+            fcfo: [
+                $this->fcfoRow(['CODCFO' => 'A1', 'CGCCFO' => '12.345.678/0001-95', 'ATIVO' => 0]),
+                $this->fcfoRow(['CODCFO' => 'A2', 'CGCCFO' => '04.124.922/0001-61', 'ATIVO' => null]),
+            ],
+            fcfoCompl: $this->fcfoComplEmOrdem(['1|A1', '1|A2']),
+        );
 
         $this->service($reader)->run($this->importOptions());
 
@@ -967,6 +1003,184 @@ class RmImportServiceTest extends TestCase
         $row = DB::table('clients')->where('id', $clientId)->first();
         $this->assertSame('OK', $row->situacao_abac);
         $this->assertSame('CA', $row->ocorrencia_abac);
+    }
+
+    /**
+     * A regra de status vinda do RM: quem está lá sem STATUS = 'OK' E
+     * OCORRENCIA = 'OK' fica desativado no app, mesmo com ATIVO = 1 na FCFO.
+     * Cli/for sem linha na FCFOCOMPL entra no mesmo saco.
+     */
+    public function test_cadastro_fora_de_ordem_no_rm_desativa_a_empresa(): void
+    {
+        $reader = new FakeRmReader(
+            fcfo: [
+                $this->fcfoRow(['CODCFO' => 'A1', 'CGCCFO' => '12.345.678/0001-95']),
+                $this->fcfoRow(['CODCFO' => 'A2', 'CGCCFO' => '04.124.922/0001-61']),
+                $this->fcfoRow(['CODCFO' => 'A3', 'CGCCFO' => '52.568.821/0001-22']),
+            ],
+            fcfoCompl: $this->fcfoComplEmOrdem(['1|A1']) + [
+                // Ocorrência fora de 'OK' já basta para desativar.
+                '1|A2' => ['CODCOLIGADA' => 1, 'CODCFO' => 'A2', 'STATUS' => 'OK', 'OCORRENCIA' => 'CR'],
+                // A3 nem linha na FCFOCOMPL tem — cadastro também não está em ordem.
+            ],
+        );
+
+        $report = $this->service($reader)->run($this->importOptions());
+
+        $this->assertSame(2, $report->clientsDesativados);
+        $this->assertSame(1, (int) DB::table('clients')->where('document', '12.345.678/0001-95')->value('status'));
+        $this->assertSame(0, (int) DB::table('clients')->where('document', '04.124.922/0001-61')->value('status'));
+        $this->assertSame(0, (int) DB::table('clients')->where('document', '52.568.821/0001-22')->value('status'));
+    }
+
+    /** O caixa/espaço da sigla varia na origem: 'ok', 'Ok ' e 'OK' valem o mesmo. */
+    public function test_ok_do_rm_e_comparado_sem_caixa_e_sem_espaco(): void
+    {
+        $reader = new FakeRmReader(
+            fcfo: [$this->fcfoRow()],
+            fcfoCompl: ['1|000123' => [
+                'CODCOLIGADA' => 1, 'CODCFO' => '000123', 'STATUS' => ' ok ', 'OCORRENCIA' => 'Ok',
+            ]],
+        );
+
+        $report = $this->service($reader)->run($this->importOptions());
+
+        $this->assertSame(0, $report->clientsDesativados);
+        $this->assertSame(1, (int) DB::table('clients')->value('status'));
+    }
+
+    /**
+     * A desativação é a única escrita da carga em cliente já existente — e, como
+     * o backfill, não é edição de usuário: sem auditoria e sem tocar no updated_at.
+     */
+    public function test_cliente_existente_fora_de_ordem_e_desativado_sem_auditoria(): void
+    {
+        $clientId = DB::table('clients')->insertGetId([
+            'name' => 'FORA DE ORDEM', 'document' => '12.345.678/0001-95', 'status' => true,
+            'created_at' => '2020-01-01 00:00:00', 'updated_at' => '2020-01-01 00:00:00',
+        ]);
+
+        $reader = new FakeRmReader(
+            fcfo: [$this->fcfoRow()],
+            fcfoCompl: ['1|000123' => [
+                'CODCOLIGADA' => 1, 'CODCFO' => '000123', 'STATUS' => 'FL', 'OCORRENCIA' => 'OK',
+            ]],
+        );
+
+        $report = $this->service($reader)->run($this->importOptions());
+
+        $this->assertSame(1, $report->clientsDesativados);
+
+        $row = DB::table('clients')->where('id', $clientId)->first();
+        $this->assertSame(0, (int) $row->status);
+        $this->assertSame('2020-01-01 00:00:00', (string) $row->updated_at);
+        $this->assertSame(0, DB::table('client_audit_logs')->count());
+    }
+
+    /** A regra só desativa: quem foi desativado à mão no app não volta pelo RM. */
+    public function test_cadastro_em_ordem_nao_reativa_cliente_desativado_no_app(): void
+    {
+        DB::table('clients')->insert([
+            'name' => 'DESATIVADA NO APP', 'document' => '12.345.678/0001-95', 'status' => false,
+            'created_at' => now(), 'updated_at' => now(),
+        ]);
+
+        $reader = new FakeRmReader(
+            fcfo: [$this->fcfoRow()],
+            fcfoCompl: $this->fcfoComplEmOrdem(['1|000123']),
+        );
+
+        $report = $this->service($reader)->run($this->importOptions());
+
+        $this->assertSame(0, $report->clientsDesativados);
+        $this->assertSame(0, (int) DB::table('clients')->value('status'));
+    }
+
+    /** Só CNPJ que está no RM entra na regra — o resto da base não é tocado. */
+    public function test_cliente_que_nao_esta_no_rm_continua_ativo(): void
+    {
+        DB::table('clients')->insert([
+            'name' => 'SO NO APP', 'document' => '04.124.922/0001-61', 'status' => true,
+            'created_at' => now(), 'updated_at' => now(),
+        ]);
+
+        $reader = new FakeRmReader(fcfo: [$this->fcfoRow()]); // outro CNPJ, sem FCFOCOMPL
+
+        $report = $this->service($reader)->run($this->importOptions());
+
+        $this->assertSame(1, $report->clientsDesativados); // só o que veio do RM
+        $this->assertSame(1, (int) DB::table('clients')->where('document', '04.124.922/0001-61')->value('status'));
+    }
+
+    /**
+     * O mesmo CNPJ aparece em mais de uma linha do RM (coligadas/códigos
+     * diferentes). Basta uma delas com o cadastro em ordem para a empresa
+     * continuar ativa — inclusive quando a linha em ordem vem depois.
+     */
+    public function test_uma_linha_em_ordem_basta_quando_o_cnpj_se_repete_no_rm(): void
+    {
+        $reader = new FakeRmReader(
+            fcfo: [
+                $this->fcfoRow(['CODCFO' => 'A1', 'CGCCFO' => '12.345.678/0001-95']),
+                $this->fcfoRow(['CODCFO' => 'A2', 'CGCCFO' => '12.345.678/0001-95']),
+            ],
+            fcfoCompl: $this->fcfoComplEmOrdem(['1|A2']) + [
+                '1|A1' => ['CODCOLIGADA' => 1, 'CODCFO' => 'A1', 'STATUS' => 'CA', 'OCORRENCIA' => 'CA'],
+            ],
+        );
+
+        $report = $this->service($reader)->run($this->importOptions(chunk: 1));
+
+        $this->assertSame(1, $report->duplicadosNoRm);
+        $this->assertSame(0, $report->clientsDesativados);
+        $this->assertSame(1, (int) DB::table('clients')->value('status'));
+    }
+
+    public function test_dry_run_conta_a_desativacao_mas_nao_grava(): void
+    {
+        DB::table('clients')->insert([
+            'name' => 'FORA DE ORDEM', 'document' => '12.345.678/0001-95', 'status' => true,
+            'created_at' => now(), 'updated_at' => now(),
+        ]);
+
+        $report = $this->service(new FakeRmReader(fcfo: [$this->fcfoRow()]))
+            ->run($this->importOptions(dryRun: true));
+
+        $this->assertSame(1, $report->clientsDesativados);
+        $this->assertSame(1, (int) DB::table('clients')->value('status'));
+    }
+
+    /** --no-desativar: a carga roda sem mexer no status de ninguém. */
+    public function test_opcao_desligada_deixa_o_status_como_esta(): void
+    {
+        DB::table('clients')->insert([
+            'name' => 'FORA DE ORDEM', 'document' => '12.345.678/0001-95', 'status' => true,
+            'created_at' => now(), 'updated_at' => now(),
+        ]);
+
+        $report = $this->service(new FakeRmReader(fcfo: [$this->fcfoRow()]))
+            ->run($this->importOptions(desativarForaDeOrdem: false));
+
+        $this->assertSame(0, $report->clientsDesativados);
+        $this->assertSame(1, (int) DB::table('clients')->value('status'));
+    }
+
+    /**
+     * A desativação não é backfill: ela vale mesmo com --no-backfill, que só
+     * governa o preenchimento de buracos em cadastro existente.
+     */
+    public function test_desativacao_independe_do_backfill(): void
+    {
+        DB::table('clients')->insert([
+            'name' => 'FORA DE ORDEM', 'document' => '12.345.678/0001-95', 'status' => true,
+            'created_at' => now(), 'updated_at' => now(),
+        ]);
+
+        $report = $this->service(new FakeRmReader(fcfo: [$this->fcfoRow()]))
+            ->run($this->importOptions(backfill: false));
+
+        $this->assertSame(1, $report->clientsDesativados);
+        $this->assertSame(0, (int) DB::table('clients')->value('status'));
     }
 
     /** A descrição da FTCF é o rótulo que vale; o código é só a chave. */

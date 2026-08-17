@@ -127,6 +127,50 @@ class AniversariantesTest extends TestCase
         $response->assertDontSee('Contato Outra');
     }
 
+    /**
+     * A lista é de contato de empresa ativa. Quem foi desativado no app — ou
+     * desativado pela carga do RM, por estar lá com STATUS/OCORRENCIA fora de
+     * 'OK' — não gera aniversariante.
+     */
+    public function test_contato_de_empresa_inativa_fica_de_fora(): void
+    {
+        $ativa = Client::factory()->create(['name' => 'ATIVA LTDA']);
+        $inativa = Client::factory()->inactive()->create(['name' => 'INATIVA LTDA']);
+
+        $this->contato($ativa, ['nome' => 'Contato Ativa', 'aniversario' => '05/09']);
+        $this->contato($inativa, ['nome' => 'Contato Inativa', 'aniversario' => '06/09']);
+
+        $response = $this->actingAs($this->usuario())
+            ->get(route('aniversariantes.index', ['mes' => 9]));
+
+        $response->assertSee('Contato Ativa');
+        $response->assertDontSee('Contato Inativa');
+        $response->assertSee('1 aniversariante');
+    }
+
+    public function test_exportacao_nao_leva_contato_de_empresa_inativa(): void
+    {
+        $ativa = Client::factory()->create(['name' => 'ATIVA']);
+        $inativa = Client::factory()->inactive()->create(['name' => 'INATIVA']);
+        $this->contato($ativa, ['nome' => 'Vai Para O Excel', 'aniversario' => '05/09']);
+        $this->contato($inativa, ['nome' => 'Nao Vai', 'aniversario' => '06/09']);
+
+        $response = $this->actingAs($this->usuario())
+            ->get(route('aniversariantes.export', ['mes' => 9]));
+
+        $arquivo = tempnam(sys_get_temp_dir(), 'aniver') . '.xlsx';
+        file_put_contents($arquivo, $response->streamedContent());
+
+        try {
+            $aba = IOFactory::load($arquivo)->getActiveSheet();
+
+            $this->assertSame(2, $aba->getHighestRow(), 'Deveria haver só o cabeçalho e uma linha.');
+            $this->assertSame('Vai Para O Excel', $aba->getCell('L2')->getValue());
+        } finally {
+            @unlink($arquivo);
+        }
+    }
+
     public function test_exportacao_gera_xlsx_com_os_dados_da_tela(): void
     {
         $client = Client::factory()->create([

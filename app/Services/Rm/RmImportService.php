@@ -32,6 +32,11 @@ use Throwable;
  * - `associado_abac` NUNCA é escrito por esta carga: quem é associado vem do
  *   legado (clients:backfill-legado) e do WordPress (associados:sync). O RM tem
  *   cli/for que não são associados da ABAC e sobrescrever isso apagaria a base.
+ * - `status`: quem está no RM sem FCFOCOMPL.STATUS = 'OK' E OCORRENCIA = 'OK'
+ *   fica desativado no app. É a única coluna de cliente existente que a carga
+ *   sobrescreve, e só num sentido — cadastro fora de ordem no RM desativa, mas
+ *   cadastro em ordem nunca reativa o que foi desativado à mão aqui. Cliente que
+ *   não tem CNPJ no RM não é tocado.
  * - Campos livres da aba "Opcionais" do RM (CAMPOALFAOP1..3 / DATAOP1..3) são a
  *   única fonte de filiação ABAC/SINAC, data de abertura e site. Diferente do
  *   resto do cadastro, eles TAMBÉM entram em clientes já existentes (backfill),
@@ -102,6 +107,18 @@ class RmImportService
 
     /** @var array<int,array<string,mixed>> clients.id => valor atual das colunas de CLIENT_RM_COLUMNS */
     private array $camposRmAtuais = [];
+
+    /**
+     * clients.id => true quando ALGUMA linha do RM daquele CNPJ veio com
+     * STATUS e OCORRENCIA = 'OK'. O "alguma" importa: o mesmo CNPJ aparece
+     * repetido no RM e basta um cadastro em ordem para a empresa continuar ativa.
+     *
+     * @var array<int,bool>
+     */
+    private array $emOrdemNoRm = [];
+
+    /** @var array<int,bool> clients.id => status corrente no destino (true = ativo) */
+    private array $statusAtual = [];
 
     /** @var array<int,true> clients.id que já têm rede social do tipo 'site' */
     private array $siteExistente = [];
@@ -196,6 +213,8 @@ class RmImportService
             );
         });
 
+        $this->desativaForaDeOrdem($options, $report);
+
         $this->logger->info('rm.import.done', $report->toArray());
 
         return $report;
@@ -210,6 +229,8 @@ class RmImportService
         $this->ccDetails = [];
         $this->ccExisting = [];
         $this->camposRmAtuais = [];
+        $this->emOrdemNoRm = [];
+        $this->statusAtual = [];
         $this->siteExistente = [];
         $this->tiposCliFor = [];
         $this->comitesDominio = [];
@@ -285,6 +306,9 @@ class RmImportService
             $clientId = $this->createClient($fcfo, $digits, $defRows, $fcfoCompl, $options, $report);
         }
 
+        $this->emOrdemNoRm[$clientId] = ($this->emOrdemNoRm[$clientId] ?? false)
+            || $this->cadastroEmOrdem($fcfoCompl);
+
         $this->rmSeenDigits[$digits] = true;
 
         if ($contatos !== []) {
@@ -345,6 +369,8 @@ class RmImportService
         }
 
         $this->byDigits[$digits] = $clientId;
+        // Sem ATIVO no RM vale o default do banco (tinyint(1) NOT NULL default 1).
+        $this->statusAtual[$clientId] = (bool) ($attrs['status'] ?? true);
 
         // Duplicado do mesmo documento mais adiante no RM cai no caminho de
         // backfill: semeia o que já foi gravado para ele só completar buracos.
@@ -577,6 +603,70 @@ class RmImportService
         foreach ($update as $coluna => $valor) {
             $report->backfillCampos[$coluna]++;
             $this->camposRmAtuais[$clientId][$coluna] = $valor;
+        }
+    }
+
+    /**
+     * "Cadastro em ordem" no RM: FCFOCOMPL.STATUS = 'OK' E OCORRENCIA = 'OK' —
+     * o mesmo par que a secretaria usava para recortar os relatórios.
+     *
+     * Cli/for sem linha na FCFOCOMPL cai no mesmo saco de quem tem o par vazio:
+     * o cadastro não está em ordem. A comparação é frouxa de propósito (aparam-se
+     * espaços e o caixa varia na origem: 'OK', 'ok', 'Ok ').
+     *
+     * @param array<string,mixed> $fcfoCompl linha de FCFOCOMPL do cli/for
+     */
+    private function cadastroEmOrdem(array $fcfoCompl): bool
+    {
+        foreach (['STATUS', 'OCORRENCIA'] as $coluna) {
+            if (mb_strtoupper(trim((string) ($fcfoCompl[$coluna] ?? ''))) !== 'OK') {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    /**
+     * Desativa quem está no RM com o cadastro fora de ordem.
+     *
+     * Roda uma vez no fim porque o mesmo CNPJ aparece em mais de uma linha do RM
+     * (coligadas diferentes) e a decisão só fecha depois de ver todas: basta uma
+     * linha em ordem para a empresa continuar ativa.
+     *
+     * Só desativa — cadastro em ordem não reativa nada. Reativar sobrescreveria a
+     * desativação feita à mão no app, que é decisão de quem cuida do cadastro.
+     * Cliente sem CNPJ no RM não entra no mapa e portanto não é tocado.
+     */
+    private function desativaForaDeOrdem(RmImportOptions $options, RmImportReport $report): void
+    {
+        if (! $options->desativarForaDeOrdem) {
+            return;
+        }
+
+        $ids = [];
+
+        foreach ($this->emOrdemNoRm as $clientId => $emOrdem) {
+            if ($emOrdem || ($this->statusAtual[$clientId] ?? true) === false) {
+                continue;
+            }
+
+            $ids[] = $clientId;
+            $this->statusAtual[$clientId] = false;
+        }
+
+        $report->clientsDesativados = count($ids);
+
+        if ($ids === [] || $options->dryRun) {
+            return;
+        }
+
+        // DB::table em vez do model, como no backfill: correção vinda da carga não
+        // é edição de usuário — não gera auditoria e não mexe no updated_at.
+        // Em lotes: a lista pode ter milhares de ids e o driver tem teto de
+        // parâmetros por query.
+        foreach (array_chunk($ids, 500) as $lote) {
+            DB::table('clients')->whereIn('id', $lote)->update(['status' => false]);
         }
     }
 
@@ -1212,11 +1302,13 @@ class RmImportService
     {
         $rows = DB::table('clients')
             ->orderBy('id')
-            ->get(array_merge(['id', 'document'], self::CLIENT_EMAIL_COLUMNS, self::CLIENT_RM_COLUMNS));
+            ->get(array_merge(['id', 'document', 'status'], self::CLIENT_EMAIL_COLUMNS, self::CLIENT_RM_COLUMNS));
 
         foreach ($rows as $row) {
             $id = (int) $row->id;
             $digits = Normalizer::digits((string) $row->document);
+
+            $this->statusAtual[$id] = (bool) $row->status;
 
             if ($digits !== '') {
                 if (isset($this->byDigits[$digits])) {

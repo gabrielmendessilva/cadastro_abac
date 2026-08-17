@@ -18,6 +18,11 @@ return [
         // já existiam no banco (nunca altera nada na tabela clients em si).
         'backfill' => true,
 
+        // Desativa em clients quem está no RM com o cadastro fora de ordem
+        // (FCFOCOMPL.STATUS e OCORRENCIA diferentes de 'OK'). Só desativa: o
+        // cadastro em ordem não reativa quem foi desativado à mão no app.
+        'desativar_fora_de_ordem' => true,
+
         // Introspecta FCFOCONTATOCOMPL e anexa campos custom na obs do contato.
         'include_contato_compl' => true,
 

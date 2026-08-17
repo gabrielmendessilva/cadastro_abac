@@ -19,8 +19,9 @@ use Illuminate\Support\Collection;
  * F.CODTCF -> categoria, FC.ASSOCIADO -> associado_abac.
  *
  * O filtro `FCFOCOMPL.STATUS = 'OK' AND OCORRENCIA = 'OK'` da consulta original
- * não é reproduzido aqui: os dois campos vieram para situacao_abac/ocorrencia_abac
- * e ficam visíveis no cadastro do cliente, mas a lista não recorta por eles.
+ * chega aqui por outro caminho: a carga do RM (rm:import) já desativa quem está
+ * no RM sem esse par em ordem, e esta lista só traz contato de empresa ativa.
+ * Por isso não há filtro de status na tela — inativa não entra, ponto.
  *
  * O "OR" da origem é fiel: contato sem data de nascimento completa entra pelo
  * aniversário dd/mm, que para ~1.345 contatos é a única informação que existe.
@@ -40,7 +41,6 @@ final class AniversariantesQuery
         public readonly int $mes,
         /** null = todos; true/false = só associados / só não associados */
         public readonly ?bool $associado = null,
-        public readonly ?bool $ativo = null,
         public readonly ?string $busca = null,
     ) {}
 
@@ -51,7 +51,6 @@ final class AniversariantesQuery
         return new self(
             mes: isset(self::MESES[$mes]) ? $mes : (int) now()->month,
             associado: $request->filled('associado') ? $request->input('associado') === '1' : null,
-            ativo: $request->filled('ativo') ? $request->input('ativo') === '1' : null,
             busca: $request->filled('busca') ? trim((string) $request->input('busca')) : null,
         );
     }
@@ -74,12 +73,14 @@ final class AniversariantesQuery
             ->select('client_contatos.*')
             ->join('clients', 'clients.id', '=', 'client_contatos.client_id')
             ->with(['client.enderecos'])
+            // Empresa desativada não gera aniversariante: quem saiu do quadro (ou
+            // está fora de ordem no RM) não entra na lista nem na exportação.
+            ->where('clients.status', true)
             ->where(function ($query) use ($sufixo) {
                 $query->whereMonth('client_contatos.dt_nascimento', $this->mes)
                     ->orWhere('client_contatos.aniversario', 'like', $sufixo);
             })
             ->when($this->associado !== null, fn ($q) => $q->where('clients.associado_abac', $this->associado))
-            ->when($this->ativo !== null, fn ($q) => $q->where('clients.status', $this->ativo))
             ->when($this->busca !== null, function ($query) {
                 $termo = '%' . $this->busca . '%';
 

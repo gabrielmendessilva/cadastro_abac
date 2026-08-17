@@ -22,7 +22,8 @@ class RmImport extends Command
         {--limit= : Processa no máximo N registros FCFO}
         {--coligada= : Restringe a uma coligada do RM}
         {--chunk= : Tamanho do chunk de leitura (default: config rm.import.chunk)}
-        {--no-backfill : Não completar clients já existentes (centro de custo, site e campos opcionais do RM)}';
+        {--no-backfill : Não completar clients já existentes (centro de custo, site e campos opcionais do RM)}
+        {--no-desativar : Não desativar quem está no RM com STATUS/OCORRENCIA diferente de OK}';
 
     protected $description = 'Importa clientes/fornecedores, contatos e centros de custo do TOTVS RM (SQL Server)';
 
@@ -59,6 +60,8 @@ class RmImport extends Command
                 coligada: $coligada,
                 chunkSize: $chunk,
                 backfill: ! $this->option('no-backfill') && (bool) config('rm.import.backfill', true),
+                desativarForaDeOrdem: ! $this->option('no-desativar')
+                    && (bool) config('rm.import.desativar_fora_de_ordem', true),
                 includeContatoCompl: (bool) config('rm.import.include_contato_compl', true),
                 maxWarningSamples: (int) config('rm.import.max_warning_samples', 200),
                 onChunk: fn (int $processed) => $bar->advance($processed),

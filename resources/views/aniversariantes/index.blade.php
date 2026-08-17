@@ -8,7 +8,7 @@
         <div>
             <h3 class="text-xl font-semibold">Aniversariantes de {{ $consulta->nomeDoMes() }}</h3>
             <p class="text-slate-500 text-sm">
-                Contatos das administradoras que fazem aniversário no mês.
+                Contatos das administradoras <strong>ativas</strong> que fazem aniversário no mês.
                 Entram tanto os que têm data de nascimento completa quanto os que só têm o dia/mês.
             </p>
         </div>
@@ -19,7 +19,7 @@
         </a>
     </div>
 
-    <form method="GET" class="mb-6 grid gap-3 md:grid-cols-5">
+    <form method="GET" class="mb-6 grid gap-3 md:grid-cols-4">
         <select name="mes" class="rounded-2xl border border-slate-300 px-4 py-3">
             @foreach ($meses as $numero => $nome)
                 <option value="{{ $numero }}" @selected($consulta->mes === $numero)>{{ $nome }}</option>
@@ -30,12 +30,6 @@
             <option value="">Administradora</option>
             <option value="1" @selected(request('associado') === '1')>Associado (S)</option>
             <option value="0" @selected(request('associado') === '0')>Não associado (N)</option>
-        </select>
-
-        <select name="ativo" class="rounded-2xl border border-slate-300 px-4 py-3">
-            <option value="">Status</option>
-            <option value="1" @selected(request('ativo') === '1')>Ativo</option>
-            <option value="0" @selected(request('ativo') === '0')>Inativo</option>
         </select>
 
         <input type="text" name="busca" value="{{ request('busca') }}"

@@ -18,6 +18,9 @@ final class RmImportReport
 
     public int $duplicadosNoRm = 0;
 
+    /** Clientes desativados por estarem no RM com o cadastro fora de ordem (STATUS/OCORRENCIA != 'OK'). */
+    public int $clientsDesativados = 0;
+
     public int $enderecosCriados = 0;
 
     public int $contatosCriados = 0;
@@ -104,6 +107,7 @@ final class RmImportReport
             ['Clientes pulados (CNPJ já existia)', $this->clientsPuladosExistentes],
             ['Clientes pulados (documento inválido)', $this->clientsPuladosInvalidos],
             ['CNPJ duplicado dentro do RM', $this->duplicadosNoRm],
+            ['Clientes desativados (cadastro fora de ordem no RM)', $this->clientsDesativados],
             ['Endereços criados', $this->enderecosCriados],
             ['Contatos criados', $this->contatosCriados],
             ['Contatos pulados (e-mail já existia)', $this->contatosPuladosEmail],
@@ -146,6 +150,7 @@ final class RmImportReport
             'clients_pulados_existentes' => $this->clientsPuladosExistentes,
             'clients_pulados_invalidos' => $this->clientsPuladosInvalidos,
             'duplicados_no_rm' => $this->duplicadosNoRm,
+            'clients_desativados' => $this->clientsDesativados,
             'enderecos_criados' => $this->enderecosCriados,
             'contatos_criados' => $this->contatosCriados,
             'contatos_pulados_email' => $this->contatosPuladosEmail,
