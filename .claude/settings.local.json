@@ -60,7 +60,10 @@
       "Bash(./vendor/bin/phpunit)",
       "Bash(python3 -)",
       "Bash(git --no-pager diff --stat)",
-      "Bash(git --no-pager log --oneline -4)"
+      "Bash(git --no-pager log --oneline -4)",
+      "Bash(docker run --rm php:8.2-fpm-bookworm bash -c ' *)",
+      "Bash(docker compose *)",
+      "Bash(docker run *)"
     ]
   }
 }

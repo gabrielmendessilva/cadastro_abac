@@ -22,8 +22,14 @@ RUN apt-get update && apt-get install -y --no-install-recommends gnupg2 unixodbc
         > /etc/apt/sources.list.d/mssql-release.list \
     && apt-get update \
     && ACCEPT_EULA=Y apt-get install -y msodbcsql18 \
-    && pecl install sqlsrv-5.12.0 pdo_sqlsrv-5.12.0 \
+    && pecl channel-update pecl.php.net \
+    # Um pecl install por extensão: com os dois no mesmo comando, uma falha de
+    # download é engolida (pecl sai 0) e só estoura depois no ext-enable.
+    && pecl install sqlsrv-5.12.0 \
+    && pecl install pdo_sqlsrv-5.12.0 \
     && docker-php-ext-enable sqlsrv pdo_sqlsrv \
+    && php -m | grep -qx sqlsrv \
+    && php -m | grep -qx pdo_sqlsrv \
     && apt-get clean && rm -rf /var/lib/apt/lists/*
 
 # ODBC no Linux exige locale UTF-8 para converter acentos (VARCHAR cp1252 -> UTF-8)
