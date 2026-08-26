@@ -53,8 +53,8 @@ Route::middleware(['auth', 'senha.trocada'])->group(function () {
     Route::get('/aniversariantes', [AniversarianteController::class, 'index'])->name('aniversariantes.index');
     Route::get('/aniversariantes/exportar', [AniversarianteController::class, 'export'])->name('aniversariantes.export');
 
-    // Perfis e permissões — somente Root
-    Route::middleware('root')->group(function () {
+    // Perfis e permissões — Root e Administrador
+    Route::middleware('permissoes')->group(function () {
         Route::get('/roles', [RoleController::class, 'index'])->name('roles.index');
         Route::post('/roles', [RoleController::class, 'store'])->name('roles.store');
         Route::post('/roles/sync', [RoleController::class, 'sync'])->name('roles.sync');

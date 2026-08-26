@@ -40,7 +40,7 @@
                         <td class="py-4 pr-4 flex gap-2 flex-wrap">
                             <a href="{{ route('users.show', $user) }}" class="rounded-xl border px-3 py-2">Ver</a>
                             @can('users.edit')<a href="{{ route('users.edit', $user) }}" class="rounded-xl border px-3 py-2">Editar</a>@endcan
-                            @if (auth()->user()->isRoot())
+                            @if (auth()->user()->podeGerenciarPermissoes())
                                 <a href="{{ route('users.permissions.edit', $user) }}"
                                    class="rounded-xl border border-blue-200 bg-blue-50 px-3 py-2 text-blue-700">🔑 Permissões</a>
                             @endif

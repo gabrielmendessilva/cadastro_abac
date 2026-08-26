@@ -46,4 +46,18 @@ class User extends Authenticatable
     {
         return $this->hasRole('Root');
     }
+
+    /**
+     * Quem administra perfis e permissões: a tela de Perfis & Permissões e as
+     * permissões individuais de cada usuário.
+     *
+     * O Administrador entra aqui junto com o Root — é o perfil de quem cuida do
+     * sistema no dia a dia. Root continua sendo o teto: nem Administrador nem
+     * ninguém consegue atribuir o perfil Root ou mexer num usuário Root
+     * (UserController) e o perfil Root nunca perde permissões (RoleController).
+     */
+    public function podeGerenciarPermissoes(): bool
+    {
+        return $this->isRoot() || $this->hasRole('Administrador');
+    }
 }

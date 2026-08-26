@@ -204,7 +204,7 @@ class UserController extends Controller
      */
     public function syncPermissions(Request $request, User $user)
     {
-        if (!auth()->user()->isRoot()) {
+        if (! auth()->user()->podeGerenciarPermissoes()) {
             abort(403);
         }
 
