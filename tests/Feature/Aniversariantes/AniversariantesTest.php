@@ -7,8 +7,8 @@ use App\Models\ClientContato;
 use App\Models\ClientEndereco;
 use App\Models\User;
 use Database\Seeders\RolePermissionSeeder;
-use Illuminate\Foundation\Testing\RefreshDatabase;
 use PhpOffice\PhpSpreadsheet\IOFactory;
+use Tests\BancoEmMemoria;
 use Tests\TestCase;
 
 /**
@@ -21,7 +21,7 @@ use Tests\TestCase;
  */
 class AniversariantesTest extends TestCase
 {
-    use RefreshDatabase;
+    use BancoEmMemoria;
 
     protected function setUp(): void
     {

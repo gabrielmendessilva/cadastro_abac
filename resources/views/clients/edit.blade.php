@@ -70,6 +70,12 @@
                         <input type="text" name="categoria" value="{{ old('categoria', $client->categoria) }}" class="w-full rounded-xl border border-slate-300 px-4 py-2.5 text-sm">
                     </div>
                     <div>
+                        <label class="mb-1 block text-sm font-medium text-slate-700">
+                            Sub Categoria <span class="ml-1 text-xs text-slate-400" title="Subcategoria vinculada à Categoria — confirmar com o cliente.">ⓘ</span>
+                        </label>
+                        <input type="text" name="classificacao" value="{{ old('classificacao', $client->classificacao) }}" placeholder="(definir com o cliente)" class="w-full rounded-xl border border-slate-300 px-4 py-2.5 text-sm">
+                    </div>
+                    <div>
                         <label class="mb-1 block text-sm font-medium text-slate-700">CNPJ / CPF</label>
                         <input type="text" name="document" value="{{ old('document', $client->document) }}" required class="w-full rounded-xl border border-slate-300 px-4 py-2.5 text-sm">
                     </div>
@@ -142,12 +148,6 @@
                             Situação ABAC <span class="ml-1 text-xs text-slate-400" title="Definição pendente — confirmar com o cliente.">ⓘ</span>
                         </label>
                         <input type="text" name="situacao_abac" value="{{ old('situacao_abac', $client->situacao_abac) }}" placeholder="(definir com o cliente)" class="w-full rounded-xl border border-slate-300 px-4 py-2.5 text-sm">
-                    </div>
-                    <div>
-                        <label class="mb-1 block text-sm font-medium text-slate-700">
-                            Classificação <span class="ml-1 text-xs text-slate-400" title="Definição pendente — confirmar com o cliente.">ⓘ</span>
-                        </label>
-                        <input type="text" name="classificacao" value="{{ old('classificacao', $client->classificacao) }}" placeholder="(definir com o cliente)" class="w-full rounded-xl border border-slate-300 px-4 py-2.5 text-sm">
                     </div>
                     <div>
                         <label class="mb-1 block text-sm font-medium text-slate-700">

@@ -7,17 +7,17 @@ use App\Http\Requests\UpdateClientRequest;
 use App\Models\Client;
 use App\Models\User;
 use Database\Seeders\RolePermissionSeeder;
-use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 use PHPUnit\Framework\Attributes\DataProvider;
+use Tests\BancoEmMemoria;
 use Tests\TestCase;
 
 /**
  * CRUD de clientes ponta a ponta (rota -> controller -> request -> model -> view).
  *
  * Ao contrário dos testes de importação (AbacAdmin/Rm), que montam um schema
- * mínimo na mão, aqui rodamos as migrations de verdade via RefreshDatabase: o
+ * mínimo na mão, aqui rodamos as migrations de verdade via BancoEmMemoria: o
  * teste de regressão estrutural no fim do arquivo só tem valor se as colunas
  * vierem das migrations, e não de um CREATE TABLE escrito dentro do teste.
  *
@@ -26,7 +26,7 @@ use Tests\TestCase;
  */
 class ClientCrudTest extends TestCase
 {
-    use RefreshDatabase;
+    use BancoEmMemoria;
 
     protected function setUp(): void
     {
@@ -107,10 +107,12 @@ class ClientCrudTest extends TestCase
 
     public function test_index_renderiza_name_e_document_do_cliente(): void
     {
+        // associado_abac: a lista já chega filtrada em Associado (S) por padrão.
         $client = Client::factory()->create([
             'name' => 'ACME ADMINISTRADORA LTDA',
             'document' => '12.345.678/0001-95',
             'email' => 'contato@acme.com.br',
+            'associado_abac' => true,
         ]);
 
         $response = $this->actingAs($this->userComRole())->get(route('clients.index'));
@@ -128,8 +130,10 @@ class ClientCrudTest extends TestCase
 
     public function test_index_com_search_por_nome_responde_200_e_retorna_o_cliente(): void
     {
-        Client::factory()->create(['name' => 'ACME ADMINISTRADORA LTDA']);
-        Client::factory()->create(['name' => 'OUTRA EMPRESA SA']);
+        // As duas associadas: quem tem de sumir da lista é OUTRA EMPRESA, e por
+        // causa do search — não porque o filtro padrão a derrubou.
+        Client::factory()->create(['name' => 'ACME ADMINISTRADORA LTDA', 'associado_abac' => true]);
+        Client::factory()->create(['name' => 'OUTRA EMPRESA SA', 'associado_abac' => true]);
 
         // Um `where('nome', ...)` no controller derruba isso: em MySQL vira 500
         // (SQLSTATE 42S22 Unknown column 'nome'); em sqlite o identificador entre
@@ -148,10 +152,12 @@ class ClientCrudTest extends TestCase
         Client::factory()->create([
             'name' => 'ACME ADMINISTRADORA LTDA',
             'document' => '12.345.678/0001-95',
+            'associado_abac' => true,
         ]);
         Client::factory()->create([
             'name' => 'OUTRA EMPRESA SA',
             'document' => '99.888.777/0001-11',
+            'associado_abac' => true,
         ]);
 
         $response = $this->actingAs($this->userComRole())
@@ -160,6 +166,55 @@ class ClientCrudTest extends TestCase
         $response->assertOk();
         $response->assertSee('12.345.678/0001-95');
         $response->assertDontSee('99.888.777/0001-11');
+    }
+
+    /**
+     * Nome de pessoa não está na razão social: mora na ficha de contato. Buscar
+     * "tania regina" na lista tem de chegar na administradora dela.
+     */
+    public function test_index_com_search_por_nome_de_pessoa_encontra_pelo_contato(): void
+    {
+        $acme = Client::factory()->create(['name' => 'ACME ADMINISTRADORA LTDA', 'associado_abac' => true]);
+        $acme->contatos()->create(['nome' => 'TANIA REGINA DE SOUZA']);
+        Client::factory()->create(['name' => 'OUTRA EMPRESA SA', 'associado_abac' => true]);
+
+        $response = $this->actingAs($this->userComRole())
+            ->get(route('clients.index', ['search' => 'tania regina']));
+
+        $response->assertOk();
+        $response->assertSee('ACME ADMINISTRADORA LTDA');
+        $response->assertDontSee('OUTRA EMPRESA SA');
+    }
+
+    /** Sobrenome no meio e espaço duplo vindos do legado não podem furar a busca. */
+    public function test_index_com_search_de_varias_palavras_casa_palavra_a_palavra(): void
+    {
+        Client::factory()->create(['name' => 'TANIA  REGINA DA SILVA ME', 'associado_abac' => true]);
+        Client::factory()->create(['name' => 'OUTRA EMPRESA SA', 'associado_abac' => true]);
+
+        $response = $this->actingAs($this->userComRole())
+            ->get(route('clients.index', ['search' => 'tania silva']));
+
+        $response->assertOk();
+        $response->assertSee('TANIA  REGINA DA SILVA ME');
+        $response->assertDontSee('OUTRA EMPRESA SA');
+    }
+
+    /**
+     * Busca sem resultado com o filtro padrão ligado engana: o cliente pode existir
+     * e estar fora de Associado (S) + Ativo. A lista tem de dizer o que filtrou.
+     */
+    public function test_index_sem_resultado_mostra_os_filtros_ativos(): void
+    {
+        Client::factory()->create(['name' => 'TANIA REGINA ME', 'associado_abac' => false]);
+
+        $response = $this->actingAs($this->userComRole())
+            ->get(route('clients.index', ['search' => 'tania regina']));
+
+        $response->assertOk();
+        $response->assertSee('Nenhum cliente encontrado.');
+        $response->assertSee('Associado (S) + Ativo');
+        $response->assertSee('Buscar em todos os clientes');
     }
 
     /** É o filtro que o login já abre aplicado (Administradora: Associado (S)). */
@@ -182,10 +237,64 @@ class ClientCrudTest extends TestCase
         $naoAssociadas->assertSee('NAO ASSOCIADA SA');
         $naoAssociadas->assertDontSee('ASSOCIADA LTDA');
 
-        // Sem o parâmetro, o filtro não se aplica.
-        $todas = $this->actingAs($user)->get(route('clients.index'));
+        // Chave presente e vazia é o usuário escolhendo "Administradora" (todos)
+        // no formulário — aí sim o filtro sai de cena.
+        $todas = $this->actingAs($user)->get(route('clients.index', ['associado' => '']));
         $todas->assertSee('ASSOCIADA LTDA');
         $todas->assertSee('NAO ASSOCIADA SA');
+    }
+
+    /**
+     * /clients sem nenhum parâmetro é a visão de trabalho: administradoras
+     * associadas e ativas. É onde o login e o menu deixam o usuário.
+     */
+    public function test_index_sem_parametro_ja_vem_filtrado_em_associado_e_ativo(): void
+    {
+        Client::factory()->create(['name' => 'ASSOCIADA ATIVA LTDA', 'associado_abac' => true]);
+        Client::factory()->inactive()->create(['name' => 'ASSOCIADA INATIVA LTDA', 'associado_abac' => true]);
+        Client::factory()->create(['name' => 'NAO ASSOCIADA SA', 'associado_abac' => false]);
+
+        $response = $this->actingAs($this->userComRole())->get(route('clients.index'));
+
+        $response->assertOk();
+        $response->assertSee('ASSOCIADA ATIVA LTDA');
+        $response->assertDontSee('ASSOCIADA INATIVA LTDA');
+        $response->assertDontSee('NAO ASSOCIADA SA');
+
+        // Os dois selects têm de chegar marcados, senão a tela mente sobre o que
+        // está mostrando.
+        $response->assertSee('<option value="1" selected>Associado (S)</option>', false);
+        $response->assertSee('<option value="1" selected>Ativo</option>', false);
+    }
+
+    /** O padrão não pode prender o usuário: escolher "todos" no form tem de valer. */
+    public function test_index_com_filtros_vazios_mostra_tudo(): void
+    {
+        Client::factory()->create(['name' => 'ASSOCIADA ATIVA LTDA', 'associado_abac' => true]);
+        Client::factory()->inactive()->create(['name' => 'ASSOCIADA INATIVA LTDA', 'associado_abac' => true]);
+        Client::factory()->create(['name' => 'NAO ASSOCIADA SA', 'associado_abac' => false]);
+
+        $response = $this->actingAs($this->userComRole())
+            ->get(route('clients.index', ['associado' => '', 'status' => '']));
+
+        $response->assertOk();
+        $response->assertSee('ASSOCIADA ATIVA LTDA');
+        $response->assertSee('ASSOCIADA INATIVA LTDA');
+        $response->assertSee('NAO ASSOCIADA SA');
+    }
+
+    /** status=0 explícito continua valendo — o padrão só entra quando a URL cala. */
+    public function test_index_com_status_zero_lista_apenas_inativos(): void
+    {
+        Client::factory()->create(['name' => 'ASSOCIADA ATIVA LTDA', 'associado_abac' => true]);
+        Client::factory()->inactive()->create(['name' => 'ASSOCIADA INATIVA LTDA', 'associado_abac' => true]);
+
+        $response = $this->actingAs($this->userComRole())
+            ->get(route('clients.index', ['status' => 0]));
+
+        $response->assertOk();
+        $response->assertSee('ASSOCIADA INATIVA LTDA');
+        $response->assertDontSee('ASSOCIADA ATIVA LTDA');
     }
 
     // ---------------------------------------------------------------- STORE

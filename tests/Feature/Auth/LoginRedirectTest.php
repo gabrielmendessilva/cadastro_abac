@@ -4,16 +4,18 @@ namespace Tests\Feature\Auth;
 
 use App\Models\User;
 use Database\Seeders\RolePermissionSeeder;
-use Illuminate\Foundation\Testing\RefreshDatabase;
+use Tests\BancoEmMemoria;
 use Tests\TestCase;
 
 /**
- * Depois do login o usuário cai direto na lista de clientes já filtrada em
- * Administradora = Associado (S) — a visão de trabalho do dia a dia.
+ * Depois do login o usuário cai direto na lista de clientes, que já chega
+ * filtrada em Administradora = Associado (S) e Status = Ativo — a visão de
+ * trabalho do dia a dia. O filtro é o padrão de /clients (ClientController),
+ * então o redirect aponta para a rota limpa.
  */
 class LoginRedirectTest extends TestCase
 {
-    use RefreshDatabase;
+    use BancoEmMemoria;
 
     protected function setUp(): void
     {
@@ -38,7 +40,7 @@ class LoginRedirectTest extends TestCase
         return $user;
     }
 
-    public function test_login_leva_para_clientes_filtrado_por_associado(): void
+    public function test_login_leva_para_a_lista_de_clientes(): void
     {
         $this->usuario();
 
@@ -47,7 +49,7 @@ class LoginRedirectTest extends TestCase
             'password' => 'senha-secreta',
         ]);
 
-        $response->assertRedirect(route('clients.index', ['associado' => 1]));
+        $response->assertRedirect(route('clients.index'));
         $this->assertAuthenticated();
     }
 
@@ -68,6 +70,6 @@ class LoginRedirectTest extends TestCase
     {
         $response = $this->actingAs($this->usuario())->get(route('login'));
 
-        $response->assertRedirect(route('clients.index', ['associado' => 1]));
+        $response->assertRedirect(route('clients.index'));
     }
 }

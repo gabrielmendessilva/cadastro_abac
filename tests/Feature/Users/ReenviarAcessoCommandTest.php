@@ -5,11 +5,11 @@ namespace Tests\Feature\Users;
 use App\Mail\CredenciaisDeAcesso;
 use App\Models\User;
 use Database\Seeders\RolePermissionSeeder;
-use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Mail\Events\MessageSending;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Mail;
+use Tests\BancoEmMemoria;
 use Tests\TestCase;
 
 /**
@@ -18,7 +18,7 @@ use Tests\TestCase;
  */
 class ReenviarAcessoCommandTest extends TestCase
 {
-    use RefreshDatabase;
+    use BancoEmMemoria;
 
     private const URL = 'https://ged.abac-admin.cloud';
 

@@ -20,6 +20,17 @@
         </include>
     </source>
     <php>
+        <!--
+            Caminhos de cache que nao existem, de proposito. Um bootstrap/cache/config.php
+            gerado com o .env de producao (o entrypoint da imagem roda `config:cache` no
+            boot) vence os <env> daqui embaixo: o Laravel le a conexao do cache e os testes
+            passam a rodar contra o banco de producao. Apontando o cache para um arquivo
+            inexistente, o config em cache nunca e carregado na suite.
+        -->
+        <env name="APP_CONFIG_CACHE" value="bootstrap/cache/config.testing-nao-existe.php"/>
+        <env name="APP_ROUTES_CACHE" value="bootstrap/cache/routes.testing-nao-existe.php"/>
+        <env name="APP_EVENTS_CACHE" value="bootstrap/cache/events.testing-nao-existe.php"/>
+
         <env name="APP_ENV" value="testing"/>
         <env name="APP_KEY" value="base64:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="/>
         <env name="APP_MAINTENANCE_DRIVER" value="file"/>

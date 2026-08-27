@@ -18,15 +18,18 @@
         <input type="text" name="search" value="{{ request('search') }}" class="rounded-2xl border border-slate-300 px-4 py-3" placeholder="Nome, CPF/CNPJ ou e-mail">
         <input type="text" name="city" value="{{ request('city') }}" class="rounded-2xl border border-slate-300 px-4 py-3" placeholder="Cidade">
         <input type="text" name="state" value="{{ request('state') }}" maxlength="2" class="rounded-2xl border border-slate-300 px-4 py-3 uppercase" placeholder="UF">
+        {{-- $filtroAssociado/$filtroStatus, e não request(): sem parâmetro na URL a
+             lista já vem filtrada em Associado + Ativo, e o select tem que mostrar
+             isso (ver ClientController::filtroComPadrao). --}}
         <select name="associado" class="rounded-2xl border border-slate-300 px-4 py-3">
             <option value="">Administradora</option>
-            <option value="1" @selected(request('associado') === '1')>Associado (S)</option>
-            <option value="0" @selected(request('associado') === '0')>Não associado (N)</option>
+            <option value="1" @selected($filtroAssociado === '1')>Associado (S)</option>
+            <option value="0" @selected($filtroAssociado === '0')>Não associado (N)</option>
         </select>
         <select name="status" class="rounded-2xl border border-slate-300 px-4 py-3">
             <option value="">Status</option>
-            <option value="1" @selected(request('status') === '1')>Ativo</option>
-            <option value="0" @selected(request('status') === '0')>Inativo</option>
+            <option value="1" @selected($filtroStatus === '1')>Ativo</option>
+            <option value="0" @selected($filtroStatus === '0')>Inativo</option>
         </select>
         <div class="flex gap-3">
             <button class="w-full rounded-2xl bg-slate-900 px-5 py-3 text-white">Buscar</button>
@@ -77,7 +80,24 @@
                     </tr>
                 @empty
                     <tr>
-                        <td colspan="6" class="py-6 text-center text-slate-500">Nenhum cliente encontrado.</td>
+                        <td colspan="6" class="py-6 text-center text-slate-500">
+                            Nenhum cliente encontrado.
+                            {{-- Busca vazia com os filtros padrão ligados engana: o cliente pode
+                                 existir e estar fora de Associado (S) + Ativo. Mostra o que está
+                                 filtrando e oferece a mesma busca sem filtro. --}}
+                            @if($filtroAssociado !== null || $filtroStatus !== null)
+                                @php
+                                    $filtrosAtivos = array_filter([
+                                        $filtroAssociado === null ? null : ($filtroAssociado === '1' ? 'Associado (S)' : 'Não associado (N)'),
+                                        $filtroStatus === null ? null : ($filtroStatus === '1' ? 'Ativo' : 'Inativo'),
+                                    ]);
+                                @endphp
+                                <div class="mt-2 text-xs">
+                                    A lista está filtrada em <span class="font-medium">{{ implode(' + ', $filtrosAtivos) }}</span>.
+                                    <a href="{{ route('clients.index', array_merge(request()->except('page'), ['associado' => '', 'status' => ''])) }}" class="text-indigo-600 underline">Buscar em todos os clientes</a>
+                                </div>
+                            @endif
+                        </td>
                     </tr>
                 @endforelse
             </tbody>

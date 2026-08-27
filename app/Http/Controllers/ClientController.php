@@ -14,28 +14,41 @@ class ClientController extends Controller
     {
         abort_unless(auth()->user()->can('clients.view'), 403);
 
+        $filtroStatus = $this->filtroComPadrao($request, 'status', '1');
+        $filtroAssociado = $this->filtroComPadrao($request, 'associado', '1');
+
         $clients = Client::query()
             ->withCount('documents')
             ->with(['enderecos' => fn ($q) => $q->orderByRaw("FIELD(tipo, 'principal','pagamento','entrega') ASC")->limit(1)])
             ->when($request->filled('search'), function ($query) use ($request) {
-                $search = (string) $request->string('search');
+                // Uma palavra por vez, todas obrigatórias: nome de pessoa ("tania regina")
+                // aparece com sobrenome no meio, espaçamento irregular vindo do legado e
+                // às vezes só na ficha de contato/sócio — busca por frase inteira não acha.
+                $termos = preg_split('/\s+/', trim((string) $request->string('search')), -1, PREG_SPLIT_NO_EMPTY);
 
-                $query->where(function ($subQuery) use ($search) {
-                    $subQuery->where('name', 'like', "%{$search}%")
-                        ->orWhere('fantasy_name', 'like', "%{$search}%")
-                        ->orWhere('nome_comercial', 'like', "%{$search}%")
-                        ->orWhere('document', 'like', "%{$search}%")
-                        ->orWhere('cpf', 'like', "%{$search}%")
-                        ->orWhere('email', 'like', "%{$search}%")
-                        ->orWhere('cod_omie', 'like', "%{$search}%");
-                });
+                foreach ($termos as $termo) {
+                    $query->where(function ($subQuery) use ($termo) {
+                        $subQuery->where('name', 'like', "%{$termo}%")
+                            ->orWhere('fantasy_name', 'like', "%{$termo}%")
+                            ->orWhere('nome_comercial', 'like', "%{$termo}%")
+                            ->orWhere('outros_nomes', 'like', "%{$termo}%")
+                            ->orWhere('responsavel_empresa', 'like', "%{$termo}%")
+                            ->orWhere('presidente_atual', 'like', "%{$termo}%")
+                            ->orWhere('document', 'like', "%{$termo}%")
+                            ->orWhere('cpf', 'like', "%{$termo}%")
+                            ->orWhere('email', 'like', "%{$termo}%")
+                            ->orWhere('cod_omie', 'like', "%{$termo}%")
+                            ->orWhereHas('contatos', fn ($q) => $q->where('nome', 'like', "%{$termo}%"))
+                            ->orWhereHas('socios', fn ($q) => $q->where('nome', 'like', "%{$termo}%"));
+                    });
+                }
             })
-            ->when($request->filled('status'), function ($query) use ($request) {
-                $query->where('status', $request->status === '1');
+            ->when($filtroStatus !== null, function ($query) use ($filtroStatus) {
+                $query->where('status', $filtroStatus === '1');
             })
             // Administradora: associada à ABAC ('S' no legado) ou não.
-            ->when($request->filled('associado'), function ($query) use ($request) {
-                $query->where('associado_abac', $request->associado === '1');
+            ->when($filtroAssociado !== null, function ($query) use ($filtroAssociado) {
+                $query->where('associado_abac', $filtroAssociado === '1');
             })
             ->when($request->filled('state'), fn($query) => $query->whereHas('enderecos', fn($q) => $q->where('estado', $request->string('state'))))
             ->when($request->filled('city'), fn($query) => $query->whereHas('enderecos', fn($q) => $q->where('municipio', 'like', '%' . $request->string('city') . '%')))
@@ -43,7 +56,23 @@ class ClientController extends Controller
             ->paginate(10)
             ->withQueryString();
 
-        return view('clients.index', compact('clients'));
+        return view('clients.index', compact('clients', 'filtroStatus', 'filtroAssociado'));
+    }
+
+    /**
+     * Valor de um filtro da lista, com o padrão da tela quando a URL não diz nada.
+     *
+     * Chave ausente é quem acabou de chegar em /clients (login, menu, link solto):
+     * entra o padrão. Chave presente e vazia é o usuário tendo escolhido "todos"
+     * no formulário — essa escolha vale, senão ele nunca sairia do padrão.
+     *
+     * Devolve null quando o filtro não deve entrar na query.
+     */
+    private function filtroComPadrao(Request $request, string $campo, string $padrao): ?string
+    {
+        $valor = $request->has($campo) ? $request->query($campo) : $padrao;
+
+        return is_string($valor) && $valor !== '' ? $valor : null;
     }
 
     public function create()

@@ -4,8 +4,8 @@ namespace Tests\Feature\Auth;
 
 use App\Models\User;
 use Database\Seeders\RolePermissionSeeder;
-use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Hash;
+use Tests\BancoEmMemoria;
 use Tests\TestCase;
 
 /**
@@ -14,7 +14,7 @@ use Tests\TestCase;
  */
 class TrocaSenhaPrimeiroAcessoTest extends TestCase
 {
-    use RefreshDatabase;
+    use BancoEmMemoria;
 
     protected function setUp(): void
     {
@@ -76,7 +76,7 @@ class TrocaSenhaPrimeiroAcessoTest extends TestCase
                 'password' => 'minha-senha-nova',
                 'password_confirmation' => 'minha-senha-nova',
             ])
-            ->assertRedirect(route('clients.index', ['associado' => 1]));
+            ->assertRedirect(route('clients.index'));
 
         $user->refresh();
 
@@ -123,7 +123,7 @@ class TrocaSenhaPrimeiroAcessoTest extends TestCase
 
         $this->actingAs($user)
             ->get(route('password.change'))
-            ->assertRedirect(route('clients.index', ['associado' => 1]));
+            ->assertRedirect(route('clients.index'));
 
         $this->actingAs($user)
             ->post(route('password.change.store'), [
@@ -131,7 +131,7 @@ class TrocaSenhaPrimeiroAcessoTest extends TestCase
                 'password' => 'outra-senha-qualquer',
                 'password_confirmation' => 'outra-senha-qualquer',
             ])
-            ->assertRedirect(route('clients.index', ['associado' => 1]));
+            ->assertRedirect(route('clients.index'));
 
         $this->assertTrue(Hash::check('senha-temporaria', $user->refresh()->password));
     }

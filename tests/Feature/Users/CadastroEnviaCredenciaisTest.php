@@ -5,9 +5,9 @@ namespace Tests\Feature\Users;
 use App\Mail\CredenciaisDeAcesso;
 use App\Models\User;
 use Database\Seeders\RolePermissionSeeder;
-use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Mail;
+use Tests\BancoEmMemoria;
 use Tests\TestCase;
 
 /**
@@ -17,7 +17,7 @@ use Tests\TestCase;
  */
 class CadastroEnviaCredenciaisTest extends TestCase
 {
-    use RefreshDatabase;
+    use BancoEmMemoria;
 
     protected function setUp(): void
     {

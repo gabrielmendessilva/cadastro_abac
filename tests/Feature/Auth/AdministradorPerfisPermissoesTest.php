@@ -4,18 +4,21 @@ namespace Tests\Feature\Auth;
 
 use App\Models\User;
 use Database\Seeders\RolePermissionSeeder;
-use Illuminate\Foundation\Testing\RefreshDatabase;
+use Spatie\Permission\Models\Permission;
+use Spatie\Permission\Models\Role;
+use Tests\BancoEmMemoria;
 use Tests\TestCase;
 
 /**
- * O perfil Administrador administra perfis e permissões: cai direto na tela ao
- * entrar e tem acesso de edição à área que antes era exclusiva do Root.
+ * O perfil Administrador tem acesso de edição a perfis e permissões — área que
+ * antes era exclusiva do Root. A tela inicial dele, porém, é a mesma de todo
+ * mundo (a lista de clientes).
  *
  * O teto continua sendo o Root — é isso que os testes do fim do arquivo travam.
  */
 class AdministradorPerfisPermissoesTest extends TestCase
 {
-    use RefreshDatabase;
+    use BancoEmMemoria;
 
     protected function setUp(): void
     {
@@ -40,7 +43,8 @@ class AdministradorPerfisPermissoesTest extends TestCase
         return $user;
     }
 
-    public function test_login_do_administrador_cai_em_perfis_e_permissoes(): void
+    /** Nenhum perfil tem tela inicial própria: todo mundo entra pela lista de clientes. */
+    public function test_login_do_administrador_cai_na_lista_de_clientes(): void
     {
         $this->usuario('Administrador');
 
@@ -49,7 +53,7 @@ class AdministradorPerfisPermissoesTest extends TestCase
             'password' => 'senha-secreta',
         ]);
 
-        $response->assertRedirect(route('roles.index'));
+        $response->assertRedirect(route('clients.index'));
         $this->assertAuthenticated();
     }
 
@@ -67,7 +71,6 @@ class AdministradorPerfisPermissoesTest extends TestCase
         $response->assertRedirect(route('password.change'));
     }
 
-    /** O Root usa o sistema inteiro: segue caindo na lista de clientes. */
     public function test_login_do_root_continua_indo_para_clientes(): void
     {
         $this->usuario('Root');
@@ -77,7 +80,7 @@ class AdministradorPerfisPermissoesTest extends TestCase
             'password' => 'senha-secreta',
         ]);
 
-        $response->assertRedirect(route('clients.index', ['associado' => 1]));
+        $response->assertRedirect(route('clients.index'));
     }
 
     public function test_administrador_abre_a_tela_de_perfis(): void
@@ -90,7 +93,7 @@ class AdministradorPerfisPermissoesTest extends TestCase
     public function test_administrador_edita_as_permissoes_de_um_perfil(): void
     {
         $admin = $this->usuario('Administrador');
-        $operador = \Spatie\Permission\Models\Role::where('name', 'Operador')->firstOrFail();
+        $operador = Role::where('name', 'Operador')->firstOrFail();
 
         $this->actingAs($admin)
             ->post(route('roles.sync'), [
@@ -152,8 +155,8 @@ class AdministradorPerfisPermissoesTest extends TestCase
     public function test_perfil_root_mantem_todas_as_permissoes_apos_sync_do_administrador(): void
     {
         $admin = $this->usuario('Administrador');
-        $rootRole = \Spatie\Permission\Models\Role::where('name', 'Root')->firstOrFail();
-        $total = \Spatie\Permission\Models\Permission::count();
+        $rootRole = Role::where('name', 'Root')->firstOrFail();
+        $total = Permission::count();
 
         $this->actingAs($admin)->post(route('roles.sync'), ['roles' => [$rootRole->id => []]]);
 
