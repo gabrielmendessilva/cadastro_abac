@@ -39,8 +39,6 @@ final class AniversariantesQuery
 
     public function __construct(
         public readonly int $mes,
-        /** null = todos; true/false = só associados / só não associados */
-        public readonly ?bool $associado = null,
         public readonly ?string $busca = null,
     ) {}
 
@@ -50,7 +48,6 @@ final class AniversariantesQuery
 
         return new self(
             mes: isset(self::MESES[$mes]) ? $mes : (int) now()->month,
-            associado: $request->filled('associado') ? $request->input('associado') === '1' : null,
             busca: $request->filled('busca') ? trim((string) $request->input('busca')) : null,
         );
     }
@@ -80,7 +77,6 @@ final class AniversariantesQuery
                 $query->whereMonth('client_contatos.dt_nascimento', $this->mes)
                     ->orWhere('client_contatos.aniversario', 'like', $sufixo);
             })
-            ->when($this->associado !== null, fn ($q) => $q->where('clients.associado_abac', $this->associado))
             ->when($this->busca !== null, function ($query) {
                 $termo = '%' . $this->busca . '%';
 

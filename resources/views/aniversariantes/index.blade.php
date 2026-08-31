@@ -19,17 +19,11 @@
         </a>
     </div>
 
-    <form method="GET" class="mb-6 grid gap-3 md:grid-cols-4">
+    <form method="GET" class="mb-6 grid gap-3 md:grid-cols-3">
         <select name="mes" class="rounded-2xl border border-slate-300 px-4 py-3">
             @foreach ($meses as $numero => $nome)
                 <option value="{{ $numero }}" @selected($consulta->mes === $numero)>{{ $nome }}</option>
             @endforeach
-        </select>
-
-        <select name="associado" class="rounded-2xl border border-slate-300 px-4 py-3">
-            <option value="">Administradora</option>
-            <option value="1" @selected(request('associado') === '1')>Associado (S)</option>
-            <option value="0" @selected(request('associado') === '0')>Não associado (N)</option>
         </select>
 
         <input type="text" name="busca" value="{{ request('busca') }}"

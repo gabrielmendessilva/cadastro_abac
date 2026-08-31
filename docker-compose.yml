@@ -7,6 +7,17 @@ services:
     restart: unless-stopped
     volumes:
       - .env:/var/www/.env
+      # Código-fonte montado do host: alterar .php/.blade.php e dar
+      # `docker compose restart app` já publica, sem rebuildar a imagem.
+      # De fora ficam vendor/, bootstrap/cache e public/build de propósito —
+      # o vendor da imagem é --no-dev e o do host tem as dependências de teste.
+      # Mexeu em composer.json ou em resources/js|css? Aí é ./deploy.sh mesmo.
+      - ./app:/var/www/app
+      - ./config:/var/www/config
+      - ./database:/var/www/database
+      - ./lang:/var/www/lang
+      - ./resources:/var/www/resources
+      - ./routes:/var/www/routes
       - storage_data:/var/www/storage
     networks:
       - ged_network

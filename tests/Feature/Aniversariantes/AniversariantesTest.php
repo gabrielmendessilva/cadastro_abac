@@ -112,21 +112,6 @@ class AniversariantesTest extends TestCase
         $response->assertSee('Deste Mes');
     }
 
-    public function test_filtra_por_administradora_associada(): void
-    {
-        $associada = Client::factory()->create(['name' => 'ASSOCIADA LTDA', 'associado_abac' => true]);
-        $outra = Client::factory()->create(['name' => 'NAO ASSOCIADA SA', 'associado_abac' => false]);
-
-        $this->contato($associada, ['nome' => 'Contato Associada', 'aniversario' => '05/09']);
-        $this->contato($outra, ['nome' => 'Contato Outra', 'aniversario' => '06/09']);
-
-        $response = $this->actingAs($this->usuario())
-            ->get(route('aniversariantes.index', ['mes' => 9, 'associado' => 1]));
-
-        $response->assertSee('Contato Associada');
-        $response->assertDontSee('Contato Outra');
-    }
-
     /**
      * A lista é de contato de empresa ativa. Quem foi desativado no app — ou
      * desativado pela carga do RM, por estar lá com STATUS/OCORRENCIA fora de
@@ -238,13 +223,13 @@ class AniversariantesTest extends TestCase
 
     public function test_exportacao_respeita_os_filtros_da_tela(): void
     {
-        $associada = Client::factory()->create(['name' => 'ASSOCIADA', 'associado_abac' => true]);
-        $outra = Client::factory()->create(['name' => 'NAO ASSOCIADA', 'associado_abac' => false]);
-        $this->contato($associada, ['nome' => 'Vai Para O Excel', 'aniversario' => '05/09']);
+        $buscada = Client::factory()->create(['name' => 'EMPRESA BUSCADA']);
+        $outra = Client::factory()->create(['name' => 'EMPRESA DE FORA']);
+        $this->contato($buscada, ['nome' => 'Vai Para O Excel', 'aniversario' => '05/09']);
         $this->contato($outra, ['nome' => 'Nao Vai', 'aniversario' => '06/09']);
 
         $response = $this->actingAs($this->usuario())
-            ->get(route('aniversariantes.export', ['mes' => 9, 'associado' => 1]));
+            ->get(route('aniversariantes.export', ['mes' => 9, 'busca' => 'BUSCADA']));
 
         $arquivo = tempnam(sys_get_temp_dir(), 'aniver') . '.xlsx';
         file_put_contents($arquivo, $response->streamedContent());
