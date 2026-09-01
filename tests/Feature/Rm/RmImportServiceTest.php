@@ -703,7 +703,7 @@ class RmImportServiceTest extends TestCase
             ->run($this->importOptions(backfill: false));
 
         $this->assertSame([0, 0, 0, 0, 0, 0, 0, 0], array_values($report->backfillCampos));
-        $this->assertSame([0, 0, 0, 0, 0, 0, 0], array_values($report->backfillContato));
+        $this->assertSame([0, 0, 0, 0, 0, 0, 0, 0], array_values($report->backfillContato));
         $this->assertSame(0, $report->redesSociaisCriadas);
         $this->assertNull(DB::table('clients')->value('num_filiacao_abac'));
         $this->assertSame(0, DB::table('client_redes_sociais')->count());
@@ -935,12 +935,14 @@ class RmImportServiceTest extends TestCase
         $this->assertSame(0, $report->contatosCriados);
         $this->assertSame(1, $report->contatosPuladosEmail);
         $this->assertSame(0, $report->backfillContato['departamento']);
+        $this->assertSame(1, $report->backfillContato['funcao']);
         $this->assertSame(1, $report->backfillContato['celular']);
         $this->assertSame(1, $report->backfillContato['aniversario']);
         $this->assertSame(1, $report->backfillContato['representante_legal']);
 
         $contato = DB::table('client_contatos')->where('id', $contatoId)->first();
         $this->assertSame('JA PREENCHIDO', $contato->departamento);
+        $this->assertSame('Financeiro', $contato->funcao);
         $this->assertSame('16/09', $contato->aniversario);
         $this->assertSame('(11) 3333-3333', $contato->celular);
         $this->assertStringStartsWith('1990-01-02', (string) $contato->dt_nascimento);
@@ -949,6 +951,33 @@ class RmImportServiceTest extends TestCase
         $this->assertSame('2020-01-01 00:00:00', (string) $contato->updated_at);
 
         $this->assertSame(1, DB::table('client_comites')->where('contato_id', $contatoId)->count());
+    }
+
+    /**
+     * A função é o campo mais editado à mão no CRUD — o backfill só completa a
+     * que está vazia, igual às demais colunas alimentadas pelo RM.
+     */
+    public function test_funcao_preenchida_a_mao_nao_e_sobrescrita_pelo_rm(): void
+    {
+        $clientId = DB::table('clients')->insertGetId([
+            'name' => 'CLIENTE', 'document' => '12.345.678/0001-95',
+            'created_at' => now(), 'updated_at' => now(),
+        ]);
+        DB::table('client_contatos')->insert([
+            'client_id' => $clientId,
+            'nome' => 'Maria Souza',
+            'email' => 'maria@x.com',
+            'funcao' => 'DIRETORA (digitado no CRUD)',
+            'created_at' => now(), 'updated_at' => now(),
+        ]);
+
+        $report = $this->service($this->readerComCompl([]))->run($this->importOptions());
+
+        $this->assertSame(0, $report->backfillContato['funcao']);
+        $this->assertSame(
+            'DIRETORA (digitado no CRUD)',
+            DB::table('client_contatos')->where('email', 'maria@x.com')->value('funcao'),
+        );
     }
 
     public function test_backfill_de_contato_nao_duplica_comite_em_reexecucao(): void
@@ -960,7 +989,7 @@ class RmImportServiceTest extends TestCase
 
         $this->assertSame(0, $segundo->comitesCriados);
         $this->assertSame(2, DB::table('client_comites')->count());
-        $this->assertSame([0, 0, 0, 0, 0, 0, 0], array_values($segundo->backfillContato));
+        $this->assertSame([0, 0, 0, 0, 0, 0, 0, 0], array_values($segundo->backfillContato));
     }
 
     /**

@@ -275,6 +275,46 @@ class AssociadosSyncServiceTest extends TestCase
         $this->assertSame(0, $report->contatosAtualizados);
     }
 
+    /**
+     * O portal grava o cargo em `_representante_funcao` — a maioria dos usuários
+     * não tem a grafia antiga `_representante_funcao_cargo`, e enquanto o sync
+     * lia só ela a função não chegava no destino.
+     */
+    public function test_funcao_cai_na_meta_nova_quando_a_antiga_nao_existe(): void
+    {
+        DB::connection('pgsql-associado')->table('wp_users')->insert([
+            ['ID' => 1, 'user_login' => 'gi', 'user_email' => 'gi@x.com', 'display_name' => 'Gi'],
+        ]);
+        DB::connection('pgsql-associado')->table('wp_usermeta')->insert([
+            ['umeta_id' => 1, 'user_id' => 1, 'meta_key' => 'cnpj_associada', 'meta_value' => '12.345.678/0001-95'],
+            ['umeta_id' => 2, 'user_id' => 1, 'meta_key' => '_representante_funcao', 'meta_value' => 'Analista'],
+        ]);
+
+        $this->service()->run(new AssociadosSyncOptions);
+
+        $this->assertSame('Analista', DB::table('client_contatos')->value('funcao'));
+    }
+
+    /**
+     * Convivendo as duas grafias, a antiga vence — é a que o formulário atual não
+     * regrava, então quando existe é porque alguém preencheu de propósito.
+     */
+    public function test_funcao_antiga_vence_a_nova_quando_as_duas_existem(): void
+    {
+        DB::connection('pgsql-associado')->table('wp_users')->insert([
+            ['ID' => 1, 'user_login' => 'gi', 'user_email' => 'gi@x.com', 'display_name' => 'Gi'],
+        ]);
+        DB::connection('pgsql-associado')->table('wp_usermeta')->insert([
+            ['umeta_id' => 1, 'user_id' => 1, 'meta_key' => 'cnpj_associada', 'meta_value' => '12.345.678/0001-95'],
+            ['umeta_id' => 2, 'user_id' => 1, 'meta_key' => '_representante_funcao', 'meta_value' => 'Analista'],
+            ['umeta_id' => 3, 'user_id' => 1, 'meta_key' => '_representante_funcao_cargo', 'meta_value' => 'Diretor Comercial'],
+        ]);
+
+        $this->service()->run(new AssociadosSyncOptions);
+
+        $this->assertSame('Diretor Comercial', DB::table('client_contatos')->value('funcao'));
+    }
+
     public function test_nome_do_contato_ignora_representante_em_branco(): void
     {
         DB::connection('pgsql-associado')->table('wp_users')->insert([

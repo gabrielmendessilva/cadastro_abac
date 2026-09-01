@@ -62,6 +62,7 @@ final class RmImportReport
      * @var array<string,int>
      */
     public array $backfillContato = [
+        'funcao' => 0,
         'dt_nascimento' => 0,
         'aniversario' => 0,
         'celular' => 0,
@@ -126,6 +127,7 @@ final class RmImportReport
             ['Situação ABAC preenchida (existentes)', $this->backfillCampos['situacao_abac']],
             ['Ocorrência ABAC preenchida (existentes)', $this->backfillCampos['ocorrencia_abac']],
             ['Vínculos de comitê criados', $this->comitesCriados],
+            ['Contatos: função preenchida (existentes)', $this->backfillContato['funcao']],
             ['Contatos: nascimento preenchido (existentes)', $this->backfillContato['dt_nascimento']],
             ['Contatos: aniversário preenchido (existentes)', $this->backfillContato['aniversario']],
             ['Contatos: celular preenchido (existentes)', $this->backfillContato['celular']],

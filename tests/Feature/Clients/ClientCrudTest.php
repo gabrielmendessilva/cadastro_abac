@@ -202,51 +202,114 @@ class ClientCrudTest extends TestCase
 
     /**
      * Busca sem resultado com o filtro padrão ligado engana: o cliente pode existir
-     * e estar fora de Associado (S) + Ativo. A lista tem de dizer o que filtrou.
+     * e estar fora de Ativo. A lista tem de dizer o que filtrou.
      */
     public function test_index_sem_resultado_mostra_os_filtros_ativos(): void
     {
-        Client::factory()->create(['name' => 'TANIA REGINA ME', 'associado_abac' => false]);
+        Client::factory()->inactive()->create(['name' => 'TANIA REGINA ME']);
 
         $response = $this->actingAs($this->userComRole())
             ->get(route('clients.index', ['search' => 'tania regina']));
 
         $response->assertOk();
         $response->assertSee('Nenhum cliente encontrado.');
-        $response->assertSee('Associado (S) + Ativo');
+        $response->assertSee('A lista está filtrada em');
         $response->assertSee('Buscar em todos os clientes');
     }
 
-    /** É o filtro que o login já abre aplicado (Administradora: Associado (S)). */
-    public function test_index_filtra_por_administradora_associada(): void
+    /** Os checkboxes de tipo de cadastro: os botões da tela antiga do Access. */
+    public function test_index_filtra_por_tipo_de_cadastro(): void
     {
-        Client::factory()->create(['name' => 'ASSOCIADA LTDA', 'associado_abac' => true]);
-        Client::factory()->create(['name' => 'NAO ASSOCIADA SA', 'associado_abac' => false]);
+        $this->semeiaOsTipos();
 
-        $user = $this->userComRole();
+        $response = $this->actingAs($this->userComRole())
+            ->get(route('clients.index', ['tipo' => ['administradoras']]));
 
-        $associadas = $this->actingAs($user)->get(route('clients.index', ['associado' => 1]));
-        $associadas->assertOk();
-        $associadas->assertSee('ASSOCIADA LTDA');
-        $associadas->assertDontSee('NAO ASSOCIADA SA');
-        // O select do filtro precisa aparecer marcado, senão o usuário não vê
-        // que a lista já chegou filtrada.
-        $associadas->assertSee('<option value="1" selected>Associado (S)</option>', false);
+        $response->assertOk();
+        $response->assertSee('UMA ADMINISTRADORA');
+        $response->assertSee('SEM AUTORIZACAO SA'); // ADMINISTRADORA SEM AUTORIZACAO entra no grupo
+        $response->assertDontSee('UM SOCIO ESPECIAL');
+        $response->assertDontSee('UM FORNECEDOR');
+    }
 
-        $naoAssociadas = $this->actingAs($user)->get(route('clients.index', ['associado' => 0]));
-        $naoAssociadas->assertSee('NAO ASSOCIADA SA');
-        $naoAssociadas->assertDontSee('ASSOCIADA LTDA');
+    /** Dois grupos marcados somam as fatias, não intersectam. */
+    public function test_index_soma_os_tipos_marcados(): void
+    {
+        $this->semeiaOsTipos();
 
-        // Chave presente e vazia é o usuário escolhendo "Administradora" (todos)
-        // no formulário — aí sim o filtro sai de cena.
-        $todas = $this->actingAs($user)->get(route('clients.index', ['associado' => '']));
-        $todas->assertSee('ASSOCIADA LTDA');
-        $todas->assertSee('NAO ASSOCIADA SA');
+        $response = $this->actingAs($this->userComRole())
+            ->get(route('clients.index', ['tipo' => ['administradoras', 'socios_especiais']]));
+
+        $response->assertOk();
+        $response->assertSee('UMA ADMINISTRADORA');
+        $response->assertSee('UM SOCIO ESPECIAL');
+        $response->assertDontSee('UM FORNECEDOR');
     }
 
     /**
-     * /clients sem nenhum parâmetro é a visão de trabalho: administradoras
-     * associadas e ativas. É onde o login e o menu deixam o usuário.
+     * "Outras Empresas" é a base inteira por definição do negócio: marcar ele
+     * dissolve a restrição em vez de somar mais uma fatia.
+     */
+    public function test_index_com_outras_empresas_nao_restringe_categoria(): void
+    {
+        $this->semeiaOsTipos();
+
+        $response = $this->actingAs($this->userComRole())
+            ->get(route('clients.index', ['tipo' => ['administradoras', 'outras_empresas']]));
+
+        $response->assertOk();
+        $response->assertSee('UMA ADMINISTRADORA');
+        $response->assertSee('UM SOCIO ESPECIAL');
+        $response->assertSee('UM FORNECEDOR');
+    }
+
+    /** Nenhum checkbox marcado é a lista inteira, como era antes do filtro existir. */
+    public function test_index_sem_tipo_marcado_nao_restringe_categoria(): void
+    {
+        $this->semeiaOsTipos();
+
+        $response = $this->actingAs($this->userComRole())->get(route('clients.index'));
+
+        $response->assertOk();
+        $response->assertSee('UMA ADMINISTRADORA');
+        $response->assertSee('UM SOCIO ESPECIAL');
+        $response->assertSee('UM FORNECEDOR');
+    }
+
+    /** Valor fora dos grupos conhecidos é descartado — não vira whereIn vazio. */
+    public function test_index_com_tipo_desconhecido_ignora_o_filtro(): void
+    {
+        $this->semeiaOsTipos();
+
+        $response = $this->actingAs($this->userComRole())
+            ->get(route('clients.index', ['tipo' => ['jabuticaba']]));
+
+        $response->assertOk();
+        $response->assertSee('UMA ADMINISTRADORA');
+        $response->assertSee('UM FORNECEDOR');
+    }
+
+    /** Um cliente de cada grupo, todos associados e ativos (o padrão da tela). */
+    private function semeiaOsTipos(): void
+    {
+        foreach ([
+            'UMA ADMINISTRADORA' => 'ADMINISTRADORA',
+            'SEM AUTORIZACAO SA' => 'ADMINISTRADORA SEM AUTORIZACAO',
+            'UM SOCIO ESPECIAL' => 'CAT ESPECIAL',
+            'UM FORNECEDOR' => 'FORNECEDOR',
+        ] as $nome => $categoria) {
+            Client::factory()->create([
+                'name' => $nome,
+                'categoria' => $categoria,
+                'associado_abac' => true,
+            ]);
+        }
+    }
+
+    /**
+     * /clients sem nenhum parâmetro é a visão de trabalho: associados ativos. É
+     * onde o login e o menu deixam o usuário, e é o estado que os controles da
+     * tela têm de refletir.
      */
     public function test_index_sem_parametro_ja_vem_filtrado_em_associado_e_ativo(): void
     {
@@ -261,21 +324,39 @@ class ClientCrudTest extends TestCase
         $response->assertDontSee('ASSOCIADA INATIVA LTDA');
         $response->assertDontSee('NAO ASSOCIADA SA');
 
-        // Os dois selects têm de chegar marcados, senão a tela mente sobre o que
-        // está mostrando.
-        $response->assertSee('<option value="1" selected>Associado (S)</option>', false);
+        // Os controles têm de chegar marcados, senão a tela mente sobre o que mostra.
         $response->assertSee('<option value="1" selected>Ativo</option>', false);
+        $response->assertSee('<input type="checkbox" name="associado" value="1" checked ', false);
     }
 
-    /** O padrão não pode prender o usuário: escolher "todos" no form tem de valer. */
-    public function test_index_com_filtros_vazios_mostra_tudo(): void
+    /**
+     * Desmarcar "Somente associados" não inverte o filtro: solta a lista.
+     *
+     * O `associado=0` é o input hidden que acompanha a caixa — é o que o navegador
+     * manda quando ela está desmarcada.
+     */
+    public function test_index_com_associado_zero_mostra_associados_e_nao_associados(): void
+    {
+        Client::factory()->create(['name' => 'ASSOCIADA ATIVA LTDA', 'associado_abac' => true]);
+        Client::factory()->create(['name' => 'NAO ASSOCIADA SA', 'associado_abac' => false]);
+
+        $response = $this->actingAs($this->userComRole())
+            ->get(route('clients.index', ['associado' => '0']));
+
+        $response->assertOk();
+        $response->assertSee('ASSOCIADA ATIVA LTDA');
+        $response->assertSee('NAO ASSOCIADA SA');
+    }
+
+    /** O padrão não pode prender o usuário: soltar os dois filtros tem de valer. */
+    public function test_index_com_filtros_soltos_mostra_tudo(): void
     {
         Client::factory()->create(['name' => 'ASSOCIADA ATIVA LTDA', 'associado_abac' => true]);
         Client::factory()->inactive()->create(['name' => 'ASSOCIADA INATIVA LTDA', 'associado_abac' => true]);
         Client::factory()->create(['name' => 'NAO ASSOCIADA SA', 'associado_abac' => false]);
 
         $response = $this->actingAs($this->userComRole())
-            ->get(route('clients.index', ['associado' => '', 'status' => '']));
+            ->get(route('clients.index', ['status' => '', 'associado' => '0']));
 
         $response->assertOk();
         $response->assertSee('ASSOCIADA ATIVA LTDA');

@@ -36,7 +36,7 @@ use Throwable;
  *   (config('associados.sync.contact_user_id')). Nome = _representante_nome_completo
  *   quando houver; senão first_name + last_name, senão nickname; usuário sem
  *   nenhuma das metas cai no display_name.
- *   Função = _representante_funcao_cargo. Desvio deliberado do legado: valor
+ *   Função = a primeira das METAS_FUNCAO com valor. Desvio deliberado do legado: valor
  *   vazio no WP nunca anula campo do contato (telefone, obs, a própria função)
  *   — o legado sobrescrevia com null o que fora preenchido à mão no CRUD.
  * - Endereço: metas de config('associados.endereco_meta_map') viram o endereço
@@ -68,8 +68,24 @@ class AssociadosSyncService
         'nickname',
     ];
 
-    /** Meta do WP com o cargo do representante — vai para client_contatos.funcao. */
-    private const META_FUNCAO = '_representante_funcao_cargo';
+    /**
+     * Metas do WP com o cargo da pessoa, na ordem em que são tentadas — vão para
+     * client_contatos.funcao.
+     *
+     * O formulário do portal trocou de nome de campo com o tempo:
+     * `_representante_funcao_cargo` é a grafia antiga (122 usuários) e
+     * `_representante_funcao` a que ele grava hoje (1.358). Ficam as duas, porque
+     * nenhuma delas repete a chave com valor divergente no mesmo usuário.
+     *
+     * `_profissionais_funcao_cargo` tem mais linhas (1.770) e continua de fora:
+     * está duplicada com valores diferentes em 1.104 delas, convivendo cargo e
+     * departamento no mesmo usuário — o critério de menor umeta_id traria o
+     * departamento como se fosse a função.
+     */
+    private const METAS_FUNCAO = [
+        '_representante_funcao_cargo',
+        '_representante_funcao',
+    ];
 
     /**
      * Colunas que o meta_map nunca pode apontar: identidade/chave, flags que o
@@ -595,6 +611,25 @@ class AssociadosSyncService
     }
 
     /**
+     * Cargo da pessoa: a primeira das METAS_FUNCAO com valor. Nada preenchido
+     * devolve null, e o vazio nunca anula a função digitada à mão no CRUD.
+     *
+     * @param array<string,string> $metas meta_key => meta_value do usuário
+     */
+    private function montaFuncaoPessoal(array $metas): ?string
+    {
+        foreach (self::METAS_FUNCAO as $meta) {
+            $valor = Normalizer::trimOrNull((string) ($metas[$meta] ?? ''));
+
+            if ($valor !== null) {
+                return $valor;
+            }
+        }
+
+        return null;
+    }
+
+    /**
      * Fase D — dados dos usuários em lote: wp_users, as metas de nome do contato,
      * as metas mapeadas e o censo das não mapeadas.
      */
@@ -617,7 +652,7 @@ class AssociadosSyncService
             // Nome e função do contato: as metas do WP, por chave.
             $rows = $this->source()->table('wp_usermeta')
                 ->whereIn('user_id', $batch)
-                ->whereIn('meta_key', [...self::METAS_NOME_PESSOAL, self::META_FUNCAO])
+                ->whereIn('meta_key', [...self::METAS_NOME_PESSOAL, ...self::METAS_FUNCAO])
                 ->orderBy('umeta_id')
                 ->get(['user_id', 'meta_key', 'meta_value']);
 
@@ -631,7 +666,7 @@ class AssociadosSyncService
 
             foreach ($porUsuario as $userId => $metas) {
                 $this->nomePessoal[$userId] = $this->montaNomePessoal($metas);
-                $this->funcaoPessoal[$userId] = Normalizer::trimOrNull((string) ($metas[self::META_FUNCAO] ?? ''));
+                $this->funcaoPessoal[$userId] = $this->montaFuncaoPessoal($metas);
             }
 
             if ($mappedKeys !== []) {

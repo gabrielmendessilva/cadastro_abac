@@ -15,7 +15,9 @@ class ClientController extends Controller
         abort_unless(auth()->user()->can('clients.view'), 403);
 
         $filtroStatus = $this->filtroComPadrao($request, 'status', '1');
-        $filtroAssociado = $this->filtroComPadrao($request, 'associado', '1');
+        $somenteAssociados = $this->somenteAssociados($request);
+        $tiposSelecionados = $this->tiposSelecionados($request);
+        $categoriasDoFiltro = $this->categoriasDoFiltro($tiposSelecionados);
 
         $clients = Client::query()
             ->withCount('documents')
@@ -46,17 +48,17 @@ class ClientController extends Controller
             ->when($filtroStatus !== null, function ($query) use ($filtroStatus) {
                 $query->where('status', $filtroStatus === '1');
             })
-            // Administradora: associada à ABAC ('S' no legado) ou não.
-            ->when($filtroAssociado !== null, function ($query) use ($filtroAssociado) {
-                $query->where('associado_abac', $filtroAssociado === '1');
-            })
+            ->when($somenteAssociados, fn ($query) => $query->where('associado_abac', true))
+            // Tipo de cadastro: os botões da tela antiga do Access virados em
+            // checkbox. null = sem restrição (nada marcado, ou "Outras Empresas").
+            ->when($categoriasDoFiltro !== null, fn ($query) => $query->whereIn('categoria', $categoriasDoFiltro))
             ->when($request->filled('state'), fn($query) => $query->whereHas('enderecos', fn($q) => $q->where('estado', $request->string('state'))))
             ->when($request->filled('city'), fn($query) => $query->whereHas('enderecos', fn($q) => $q->where('municipio', 'like', '%' . $request->string('city') . '%')))
             ->latest()
             ->paginate(10)
             ->withQueryString();
 
-        return view('clients.index', compact('clients', 'filtroStatus', 'filtroAssociado'));
+        return view('clients.index', compact('clients', 'filtroStatus', 'somenteAssociados', 'tiposSelecionados'));
     }
 
     /**
@@ -73,6 +75,65 @@ class ClientController extends Controller
         $valor = $request->has($campo) ? $request->query($campo) : $padrao;
 
         return is_string($valor) && $valor !== '' ? $valor : null;
+    }
+
+    /**
+     * Se a lista deve mostrar só quem é associado à ABAC.
+     *
+     * Marcado é o estado de abertura da tela: sem a chave na URL (login, menu,
+     * link solto) o filtro entra. Desmarcado, o formulário manda `associado=0`
+     * pelo input hidden que acompanha a caixa — é só assim que dá para separar
+     * "desmarquei" de "nem submeti", já que checkbox desmarcado não é enviado.
+     *
+     * Desmarcado não inverte o filtro: solta a lista inteira, associados e não
+     * associados juntos.
+     */
+    private function somenteAssociados(Request $request): bool
+    {
+        return ! $request->has('associado') || $request->query('associado') === '1';
+    }
+
+    /**
+     * Grupos de tipo de cadastro marcados na tela, descartando o que não existe.
+     *
+     * @return list<string>
+     */
+    private function tiposSelecionados(Request $request): array
+    {
+        $marcados = array_filter((array) $request->query('tipo', []), 'is_string');
+
+        return array_values(array_intersect($marcados, array_keys(Client::GRUPOS_CATEGORIA)));
+    }
+
+    /**
+     * Categorias que a lista deve exigir, ou null quando não há restrição.
+     *
+     * Nada marcado é a lista inteira. "Outras Empresas" também: ele é a base
+     * toda por definição do negócio, então marcar ele junto com outro grupo
+     * dissolve a restrição em vez de somar mais uma fatia.
+     *
+     * @param list<string> $tipos
+     * @return list<string>|null
+     */
+    private function categoriasDoFiltro(array $tipos): ?array
+    {
+        if ($tipos === []) {
+            return null;
+        }
+
+        $categorias = [];
+
+        foreach ($tipos as $tipo) {
+            $doGrupo = Client::GRUPOS_CATEGORIA[$tipo]['categorias'];
+
+            if ($doGrupo === []) {
+                return null;
+            }
+
+            $categorias = array_merge($categorias, $doGrupo);
+        }
+
+        return array_values(array_unique($categorias));
     }
 
     public function create()

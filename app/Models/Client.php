@@ -9,6 +9,29 @@ class Client extends Model
 {
     use HasFactory;
 
+    /**
+     * Grupos do filtro "tipo de cadastro" da lista, espelhando os botões da tela
+     * de Cadastro do sistema antigo (Access).
+     *
+     * As categorias são os valores crus da coluna `categoria`, que veio do legado
+     * como texto livre — daí a lista explícita em vez de um LIKE. Grupo com
+     * `categorias` vazio não restringe nada: "Outras Empresas" é a base inteira.
+     */
+    public const GRUPOS_CATEGORIA = [
+        'administradoras' => [
+            'rotulo' => 'Administradoras de Consórcios',
+            'categorias' => ['ADMINISTRADORA', 'ADMINISTRADORA SEM AUTORIZACAO'],
+        ],
+        'socios_especiais' => [
+            'rotulo' => 'Sócios Especiais',
+            'categorias' => ['CAT ESPECIAL', 'CAT ESPECIAL 2'],
+        ],
+        'outras_empresas' => [
+            'rotulo' => 'Outras Empresas',
+            'categorias' => [],
+        ],
+    ];
+
     protected $guarded = ['id'];
 
     protected function casts(): array

@@ -68,7 +68,7 @@ class RmImportService
 
     /** Idem para client_contatos: colunas alimentadas por FCFOCONTATO/FCFOCONTATOCOMPL. */
     private const CONTATO_RM_COLUMNS = [
-        'dt_nascimento', 'aniversario', 'celular',
+        'funcao', 'dt_nascimento', 'aniversario', 'celular',
         'departamento', 'outro_departamento', 'representante_legal', 'comite',
     ];
 
@@ -989,7 +989,6 @@ class RmImportService
         return [
             'client_id' => $clientId,
             'nome' => Normalizer::limit((string) ($contato['NOME'] ?? ''), 255),
-            'funcao' => Normalizer::limit((string) ($contato['FUNCAO'] ?? ''), 255),
             'email' => $emails[0] ?? null,
             'email_2' => $emails[1] ?? null,
             'telefone' => Normalizer::limit((string) ($contato['TELEFONE'] ?? ''), 255),
@@ -1000,6 +999,10 @@ class RmImportService
 
     /**
      * Colunas de client_contatos alimentadas pelo RM.
+     *
+     * FUNCAO mora aqui, e não na montagem da criação, para o backfill também
+     * completá-la em contato que já existia no destino — 1.177 contatos criados
+     * antes do primeiro tombamento tinham a coluna vazia com a função no RM.
      *
      * FAX guarda celular nesta base (1.762 dos 1.929 valores começam com 9), daí
      * ele ir para `celular` e não para um segundo telefone. DEPTO/OUTROS/
@@ -1016,6 +1019,7 @@ class RmImportService
         $outros = $this->complValor($compl, 'OUTROS');
 
         return [
+            'funcao' => Normalizer::limit((string) ($contato['FUNCAO'] ?? ''), 255),
             'dt_nascimento' => Normalizer::toDateOrNull($contato['DATANASCIMENTO'] ?? null)
                 ?? Normalizer::toDateOrNull($compl['ANIV'] ?? null),
             'aniversario' => $this->resolveAniversario($contato, $compl),
