@@ -128,7 +128,7 @@ class AssociadosSyncServiceTest extends TestCase
         ]);
 
         DB::connection('pgsql-associado')->table('wp_usermeta')->insert([
-            // user 1 — primeira meta é o nickname (vira o nome do contato, regra legada)
+            // user 1 — só nickname, sem first/last: o contato cai na reserva
             ['umeta_id' => 1, 'user_id' => 1, 'meta_key' => 'nickname', 'meta_value' => 'Maria Nick'],
             ['umeta_id' => 2, 'user_id' => 1, 'meta_key' => 'cnpj_associada', 'meta_value' => '12.345.678/0001-95'],
             ['umeta_id' => 3, 'user_id' => 1, 'meta_key' => 'razao_social', 'meta_value' => 'EMPRESA WP A'],
@@ -149,6 +149,11 @@ class AssociadosSyncServiceTest extends TestCase
             ['umeta_id' => 14, 'user_id' => 1, 'meta_key' => '_associada_bairro', 'meta_value' => 'BELA VISTA'],
             ['umeta_id' => 15, 'user_id' => 1, 'meta_key' => '_associada_cidade', 'meta_value' => 'SÃO PAULO'],
             ['umeta_id' => 16, 'user_id' => 1, 'meta_key' => '_associada_uf', 'meta_value' => 'SP'],
+            // user 2 — sobrenome e apelido gravados DEPOIS do first_name. Pela regra
+            // antiga (menor umeta_id) o nome seria só 'João'; agora first_name +
+            // last_name vencem, e o nickname fica de reserva sem ser usado.
+            ['umeta_id' => 17, 'user_id' => 2, 'meta_key' => 'last_name', 'meta_value' => 'Souza'],
+            ['umeta_id' => 18, 'user_id' => 2, 'meta_key' => 'nickname', 'meta_value' => 'Jô'],
         ]);
     }
 
@@ -195,8 +200,8 @@ class AssociadosSyncServiceTest extends TestCase
         $contatos = DB::table('client_contatos')->where('client_id', $clientA->id)->orderBy('email')->get();
         $this->assertCount(2, $contatos);
         $this->assertSame(['joao@x.com', 'maria@x.com'], $contatos->pluck('email')->all());
-        $this->assertSame('João', $contatos[0]->nome); // primeira meta do user 2
-        $this->assertSame('Maria Nick', $contatos[1]->nome); // primeira meta do user 1
+        $this->assertSame('João Souza', $contatos[0]->nome); // first_name + last_name
+        $this->assertSame('Maria Nick', $contatos[1]->nome); // sem first/last: nickname
         $this->assertSame([1, 1], $contatos->pluck('user_id')->map(fn ($v) => (int) $v)->all());
         $this->assertSame(0, (int) $contatos[0]->unlock_whatsApp);
 
@@ -212,6 +217,84 @@ class AssociadosSyncServiceTest extends TestCase
         $this->assertArrayHasKey('first_name', $report->metasNaoMapeadas);
         $this->assertArrayNotHasKey('nickname', $report->metasNaoMapeadas);
         $this->assertArrayNotHasKey('_associada_cep', $report->metasNaoMapeadas); // mapeada p/ endereço
+    }
+
+    public function test_nome_do_contato_prefere_representante_nome_completo(): void
+    {
+        DB::connection('pgsql-associado')->table('wp_users')->insert([
+            ['ID' => 1, 'user_login' => 'gi', 'user_email' => 'gi@x.com', 'display_name' => 'Gi'],
+        ]);
+        // Ordem real do WP: nickname nasce primeiro, o formulário da associada
+        // grava depois. Mesmo com o maior umeta_id, o nome completo tem de vencer
+        // tanto o apelido quanto o first_name + last_name.
+        DB::connection('pgsql-associado')->table('wp_usermeta')->insert([
+            ['umeta_id' => 1, 'user_id' => 1, 'meta_key' => 'nickname', 'meta_value' => 'GI'],
+            ['umeta_id' => 2, 'user_id' => 1, 'meta_key' => 'first_name', 'meta_value' => 'Gilberto'],
+            ['umeta_id' => 3, 'user_id' => 1, 'meta_key' => 'last_name', 'meta_value' => 'Alves'],
+            ['umeta_id' => 4, 'user_id' => 1, 'meta_key' => 'cnpj_associada', 'meta_value' => '12.345.678/0001-95'],
+            ['umeta_id' => 5, 'user_id' => 1, 'meta_key' => '_representante_nome_completo', 'meta_value' => 'Gilberto Alves de Souza'],
+            ['umeta_id' => 6, 'user_id' => 1, 'meta_key' => '_representante_funcao_cargo', 'meta_value' => 'Diretor Comercial'],
+        ]);
+
+        $this->service()->run(new AssociadosSyncOptions);
+
+        $contatos = DB::table('client_contatos')->get();
+        $this->assertCount(1, $contatos);
+        $this->assertSame('Gilberto Alves de Souza', $contatos[0]->nome);
+        $this->assertSame('Diretor Comercial', $contatos[0]->funcao);
+    }
+
+    public function test_funcao_vazia_no_wp_nao_apaga_a_digitada_a_mao(): void
+    {
+        $clientId = DB::table('clients')->insertGetId([
+            'name' => 'EMPRESA A', 'document' => '12.345.678/0001-95', 'associado_abac' => true,
+            'created_at' => now(), 'updated_at' => now(),
+        ]);
+        DB::table('client_contatos')->insert([
+            'client_id' => $clientId, 'user_id' => 7,
+            'nome' => 'Gilberto Alves de Souza', 'funcao' => 'Cargo Digitado No CRUD',
+            'email' => 'gi@x.com', 'created_at' => now(), 'updated_at' => now(),
+        ]);
+
+        DB::connection('pgsql-associado')->table('wp_users')->insert([
+            ['ID' => 1, 'user_login' => 'gi', 'user_email' => 'gi@x.com', 'display_name' => 'Gi'],
+        ]);
+        DB::connection('pgsql-associado')->table('wp_usermeta')->insert([
+            ['umeta_id' => 1, 'user_id' => 1, 'meta_key' => 'cnpj_associada', 'meta_value' => '12.345.678/0001-95'],
+            ['umeta_id' => 2, 'user_id' => 1, 'meta_key' => '_representante_nome_completo', 'meta_value' => 'Gilberto Alves de Souza'],
+            // Cargo em branco na origem: não pode zerar o que já estava no destino.
+            ['umeta_id' => 3, 'user_id' => 1, 'meta_key' => '_representante_funcao_cargo', 'meta_value' => ''],
+        ]);
+
+        $report = $this->service()->run(new AssociadosSyncOptions);
+
+        $contato = DB::table('client_contatos')->first();
+        $this->assertSame('Cargo Digitado No CRUD', $contato->funcao);
+        $this->assertSame(7, (int) $contato->user_id); // sem mudança, sem update
+        $this->assertSame(1, $report->contatosSemMudanca);
+        $this->assertSame(0, $report->contatosAtualizados);
+    }
+
+    public function test_nome_do_contato_ignora_representante_em_branco(): void
+    {
+        DB::connection('pgsql-associado')->table('wp_users')->insert([
+            ['ID' => 1, 'user_login' => 'gi', 'user_email' => 'gi@x.com', 'display_name' => 'Gi'],
+        ]);
+        DB::connection('pgsql-associado')->table('wp_usermeta')->insert([
+            ['umeta_id' => 1, 'user_id' => 1, 'meta_key' => 'nickname', 'meta_value' => 'GI'],
+            ['umeta_id' => 2, 'user_id' => 1, 'meta_key' => 'first_name', 'meta_value' => 'Gilberto'],
+            ['umeta_id' => 3, 'user_id' => 1, 'meta_key' => 'last_name', 'meta_value' => 'Alves'],
+            ['umeta_id' => 4, 'user_id' => 1, 'meta_key' => 'cnpj_associada', 'meta_value' => '12.345.678/0001-95'],
+            // Campo existe no WP mas ficou em branco: não pode zerar o nome nem
+            // sequestrar a vez do first_name + last_name.
+            ['umeta_id' => 5, 'user_id' => 1, 'meta_key' => '_representante_nome_completo', 'meta_value' => '   '],
+        ]);
+
+        $this->service()->run(new AssociadosSyncOptions);
+
+        $contatos = DB::table('client_contatos')->get();
+        $this->assertCount(1, $contatos);
+        $this->assertSame('Gilberto Alves', $contatos[0]->nome);
     }
 
     public function test_atualiza_cliente_existente_por_digitos_sem_tocar_document(): void

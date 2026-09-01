@@ -33,12 +33,12 @@ use Throwable;
  *   mapeada ou display_name, associado_abac, status, carimbo em obs_cadastro).
  * - Contato: chave aplicativa (client_id, e-mail minúsculo/trimado) — o legado
  *   usava updateOrCreate por client_id + email. user_id fixo
- *   (config('associados.sync.contact_user_id')). Nome = PRIMEIRA meta do
- *   usuário no WP (menor umeta_id — comportamento do script legado, mantido por
- *   decisão de negócio); usuário sem meta nenhuma cai no display_name.
- *   Desvio deliberado do legado: os demais campos do contato (funcao, telefone,
- *   obs...) NÃO são anulados no update — o legado sobrescrevia com null campos
- *   preenchidos à mão no CRUD.
+ *   (config('associados.sync.contact_user_id')). Nome = _representante_nome_completo
+ *   quando houver; senão first_name + last_name, senão nickname; usuário sem
+ *   nenhuma das metas cai no display_name.
+ *   Função = _representante_funcao_cargo. Desvio deliberado do legado: valor
+ *   vazio no WP nunca anula campo do contato (telefone, obs, a própria função)
+ *   — o legado sobrescrevia com null o que fora preenchido à mão no CRUD.
  * - Endereço: metas de config('associados.endereco_meta_map') viram o endereço
  *   tipo "principal" do cliente em client_enderecos (cria se não existir,
  *   atualiza campo a campo; vazio nunca sobrescreve; NOT NULL vira '' como no
@@ -51,6 +51,25 @@ class AssociadosSyncService
 {
     /** Tamanho dos lotes de whereIn contra o banco remoto. */
     private const WHEREIN_BATCH = 500;
+
+    /**
+     * Metas do WP que carregam o nome da pessoa, na ordem em que são tentadas.
+     *
+     * `_representante_nome_completo` é o campo que a própria associada preencheu
+     * no formulário, então vence tudo. Só na falta dele entram as metas nativas
+     * do WP: `wp_insert_user()` grava o `nickname` antes de first_name/last_name,
+     * e a regra antiga (menor umeta_id) por isso trazia apelido ("GI") em vez do
+     * nome — ou, num usuário sem nickname, a meta que tivesse sido gravada antes.
+     */
+    private const METAS_NOME_PESSOAL = [
+        '_representante_nome_completo',
+        'first_name',
+        'last_name',
+        'nickname',
+    ];
+
+    /** Meta do WP com o cargo do representante — vai para client_contatos.funcao. */
+    private const META_FUNCAO = '_representante_funcao_cargo';
 
     /**
      * Colunas que o meta_map nunca pode apontar: identidade/chave, flags que o
@@ -89,8 +108,11 @@ class AssociadosSyncService
     /** @var array<int,object{ID:int|string,user_email:?string,display_name:?string}> */
     private array $wpUsers = [];
 
-    /** @var array<int,?string> user_id => valor da primeira meta (menor umeta_id) */
-    private array $primeiraMeta = [];
+    /** @var array<int,?string> user_id => nome da pessoa montado das metas do WP */
+    private array $nomePessoal = [];
+
+    /** @var array<int,?string> user_id => cargo do representante no WP */
+    private array $funcaoPessoal = [];
 
     /** @var array<int,array<string,string>> user_id => [meta_key mapeada => valor] */
     private array $metasPorUser = [];
@@ -222,7 +244,8 @@ class AssociadosSyncService
         $this->clientState = [];
         $this->usersPorCnpj = [];
         $this->wpUsers = [];
-        $this->primeiraMeta = [];
+        $this->nomePessoal = [];
+        $this->funcaoPessoal = [];
         $this->metasPorUser = [];
         $this->limits = ['clients' => [], 'client_contatos' => [], 'client_enderecos' => []];
         $this->hasObsCadastro = false;
@@ -542,8 +565,38 @@ class AssociadosSyncService
     }
 
     /**
-     * Fase D — dados dos usuários em lote: wp_users, a "primeira meta" (nome do
-     * contato, comportamento legado), as metas mapeadas e o censo das não mapeadas.
+     * Nome da pessoa a partir das metas do WP, em ordem de preferência:
+     * `_representante_nome_completo`, depois first_name + last_name, depois o
+     * nickname.
+     *
+     * Sobrenome sozinho também vale — meio nome é melhor que apelido. Nada
+     * preenchido devolve null e quem chama cai no display_name.
+     *
+     * @param array<string,string> $metas meta_key => meta_value do usuário
+     */
+    private function montaNomePessoal(array $metas): ?string
+    {
+        $completo = Normalizer::trimOrNull((string) ($metas['_representante_nome_completo'] ?? ''));
+
+        if ($completo !== null) {
+            return $completo;
+        }
+
+        $partes = array_filter([
+            Normalizer::trimOrNull((string) ($metas['first_name'] ?? '')),
+            Normalizer::trimOrNull((string) ($metas['last_name'] ?? '')),
+        ]);
+
+        if ($partes !== []) {
+            return implode(' ', $partes);
+        }
+
+        return Normalizer::trimOrNull((string) ($metas['nickname'] ?? ''));
+    }
+
+    /**
+     * Fase D — dados dos usuários em lote: wp_users, as metas de nome do contato,
+     * as metas mapeadas e o censo das não mapeadas.
      */
     private function loadUserData(AssociadosSyncReport $report): void
     {
@@ -561,21 +614,24 @@ class AssociadosSyncService
                 $this->wpUsers[(int) $user->ID] = $user;
             }
 
-            // Nome legado: a primeira linha de usermeta do usuário (menor umeta_id).
-            $mins = $this->source()->table('wp_usermeta')
+            // Nome e função do contato: as metas do WP, por chave.
+            $rows = $this->source()->table('wp_usermeta')
                 ->whereIn('user_id', $batch)
-                ->groupBy('user_id')
-                ->selectRaw('MIN(umeta_id) as umeta_id')
-                ->pluck('umeta_id');
+                ->whereIn('meta_key', [...self::METAS_NOME_PESSOAL, self::META_FUNCAO])
+                ->orderBy('umeta_id')
+                ->get(['user_id', 'meta_key', 'meta_value']);
 
-            if ($mins->isNotEmpty()) {
-                $rows = $this->source()->table('wp_usermeta')
-                    ->whereIn('umeta_id', $mins->all())
-                    ->get(['user_id', 'meta_value']);
+            $porUsuario = [];
 
-                foreach ($rows as $row) {
-                    $this->primeiraMeta[(int) $row->user_id] = Normalizer::trimOrNull((string) $row->meta_value);
-                }
+            foreach ($rows as $row) {
+                // Meta repetida para o mesmo usuário: vence a de menor umeta_id,
+                // igual ao critério das metas mapeadas logo abaixo.
+                $porUsuario[(int) $row->user_id][(string) $row->meta_key] ??= (string) $row->meta_value;
+            }
+
+            foreach ($porUsuario as $userId => $metas) {
+                $this->nomePessoal[$userId] = $this->montaNomePessoal($metas);
+                $this->funcaoPessoal[$userId] = Normalizer::trimOrNull((string) ($metas[self::META_FUNCAO] ?? ''));
             }
 
             if ($mappedKeys !== []) {
@@ -667,7 +723,7 @@ class AssociadosSyncService
      * (duplicado no destino: vence o de menor id, os demais ficam intocados).
      *
      * @param list<string> $digitsList
-     * @return array<int,array<string,array{id:?int,nome:?string}>>
+     * @return array<int,array<string,array{id:?int,nome:?string,funcao:?string}>>
      */
     private function preloadContatos(array $digitsList): array
     {
@@ -685,7 +741,7 @@ class AssociadosSyncService
             $rows = DB::table('client_contatos')
                 ->whereIn('client_id', $batch)
                 ->orderBy('id')
-                ->get(['id', 'client_id', 'email', 'nome']);
+                ->get(['id', 'client_id', 'email', 'nome', 'funcao']);
 
             foreach ($rows as $row) {
                 $email = mb_strtolower(trim((string) $row->email));
@@ -697,6 +753,7 @@ class AssociadosSyncService
                 $state[(int) $row->client_id][$email] = [
                     'id' => (int) $row->id,
                     'nome' => Normalizer::trimOrNull((string) $row->nome),
+                    'funcao' => Normalizer::trimOrNull((string) $row->funcao),
                 ];
             }
         }
@@ -751,7 +808,7 @@ class AssociadosSyncService
     }
 
     /**
-     * @param array<int,array<string,array{id:?int,nome:?string}>> $contactState
+     * @param array<int,array<string,array{id:?int,nome:?string,funcao:?string}>> $contactState
      * @param array<int,array{id:int,fields:array<string,mixed>}> $enderecoState
      */
     private function processarCnpj(
@@ -941,7 +998,7 @@ class AssociadosSyncService
      * legado (updateOrCreate por client_id + email).
      *
      * @param list<int> $userIds
-     * @param array<int,array<string,array{id:?int,nome:?string}>> $contactState
+     * @param array<int,array<string,array{id:?int,nome:?string,funcao:?string}>> $contactState
      */
     private function sincronizarContatos(
         int $clientId,
@@ -995,9 +1052,11 @@ class AssociadosSyncService
             $email = (string) $email;
             $user = $this->wpUsers[$userId];
 
-            $nome = $this->primeiraMeta[$userId]
+            $nome = $this->nomePessoal[$userId]
                 ?? Normalizer::trimOrNull((string) $user->display_name);
             $nome = $this->truncate('client_contatos', 'nome', $nome);
+
+            $funcao = $this->truncate('client_contatos', 'funcao', $this->funcaoPessoal[$userId] ?? null);
 
             $existing = $contactState[$clientId][$email] ?? null;
 
@@ -1007,33 +1066,52 @@ class AssociadosSyncService
                         'client_id' => $clientId,
                         'user_id' => $this->contactUserId,
                         'nome' => $nome,
+                        'funcao' => $funcao,
                         'email' => $email,
                         'unlock_whatsApp' => false,
                     ]);
                 }
 
                 $report->contatosCriados++;
-                $contactState[$clientId][$email] = ['id' => null, 'nome' => $nome];
-            } elseif ($nome !== null && $nome !== $existing['nome']) {
-                if (! $options->dryRun) {
-                    // Update pelo id pré-carregado (uma query, e imune a diferença
-                    // de caixa entre o e-mail gravado e o normalizado).
-                    if ($existing['id'] !== null) {
-                        ClientContato::whereKey($existing['id'])
-                            ->update(['user_id' => $this->contactUserId, 'nome' => $nome]);
-                    } else {
-                        ClientContato::updateOrCreate(
-                            ['client_id' => $clientId, 'email' => $email],
-                            ['user_id' => $this->contactUserId, 'nome' => $nome],
-                        );
-                    }
-                }
+                $contactState[$clientId][$email] = ['id' => null, 'nome' => $nome, 'funcao' => $funcao];
 
-                $report->contatosAtualizados++;
-                $contactState[$clientId][$email]['nome'] = $nome;
-            } else {
-                $report->contatosSemMudanca++;
+                continue;
             }
+
+            // Vazio no WP nunca sobrescreve o que foi digitado à mão no CRUD —
+            // mesma regra do meta_map dos clientes.
+            $mudancas = [];
+
+            if ($nome !== null && $nome !== $existing['nome']) {
+                $mudancas['nome'] = $nome;
+            }
+
+            if ($funcao !== null && $funcao !== ($existing['funcao'] ?? null)) {
+                $mudancas['funcao'] = $funcao;
+            }
+
+            if ($mudancas === []) {
+                $report->contatosSemMudanca++;
+
+                continue;
+            }
+
+            if (! $options->dryRun) {
+                // Update pelo id pré-carregado (uma query, e imune a diferença
+                // de caixa entre o e-mail gravado e o normalizado).
+                if ($existing['id'] !== null) {
+                    ClientContato::whereKey($existing['id'])
+                        ->update(['user_id' => $this->contactUserId] + $mudancas);
+                } else {
+                    ClientContato::updateOrCreate(
+                        ['client_id' => $clientId, 'email' => $email],
+                        ['user_id' => $this->contactUserId] + $mudancas,
+                    );
+                }
+            }
+
+            $report->contatosAtualizados++;
+            $contactState[$clientId][$email] = array_merge($existing, $mudancas);
         }
     }
 

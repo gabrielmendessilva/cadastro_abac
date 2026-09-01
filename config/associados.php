@@ -71,6 +71,10 @@ return [
         'dismissed_wp_pointers',
         'default_password_nag',
         '_associada_logo',
+        // Consumidas como nome e função do contato (ver METAS_NOME_PESSOAL e
+        // META_FUNCAO no service).
+        '_representante_nome_completo',
+        '_representante_funcao_cargo',
         // Lixo interno do WP visto no censo da primeira execução real.
         'wp_elementor_enable_ai',
         'community-events-location',
