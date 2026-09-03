@@ -3,11 +3,13 @@
 namespace App\Http\Requests;
 
 use App\Http\Requests\Concerns\NormalizaDocumento;
+use App\Http\Requests\Concerns\RecusaDocumentoDuplicado;
 use Illuminate\Foundation\Http\FormRequest;
 
 class StoreClientRequest extends FormRequest
 {
     use NormalizaDocumento;
+    use RecusaDocumentoDuplicado;
 
     public function authorize(): bool
     {
@@ -27,7 +29,7 @@ class StoreClientRequest extends FormRequest
             'classificacao' => ['nullable', 'string', 'max:100'],
             'categoria' => ['nullable', 'string', 'max:100'],
             // A coluna é NOT NULL + UNIQUE: deixar passar vazio derrubaria o INSERT com 500.
-            'document' => ['required', 'string', 'max:20', 'unique:clients,document'],
+            'document' => ['required', 'string', 'max:20', $this->documentoInedito()],
             'cpf' => ['nullable', 'string', 'max:20'],
             'rg' => ['nullable', 'string', 'max:30'],
             'dt_nascimento' => ['nullable', 'date'],

@@ -3,12 +3,13 @@
 namespace App\Http\Requests;
 
 use App\Http\Requests\Concerns\NormalizaDocumento;
+use App\Http\Requests\Concerns\RecusaDocumentoDuplicado;
 use Illuminate\Foundation\Http\FormRequest;
-use Illuminate\Validation\Rule;
 
 class UpdateClientRequest extends FormRequest
 {
     use NormalizaDocumento;
+    use RecusaDocumentoDuplicado;
 
     public function authorize(): bool
     {
@@ -29,7 +30,7 @@ class UpdateClientRequest extends FormRequest
             'categoria' => ['nullable', 'string', 'max:100'],
             // `sometimes` porque os modais da tela de detalhe postam formulários
             // parciais sem este campo; quando ele vem, não pode vir vazio (coluna NOT NULL).
-            'document' => ['sometimes', 'required', 'string', 'max:20', Rule::unique('clients', 'document')->ignore($this->route('client'))],
+            'document' => ['sometimes', 'required', 'string', 'max:20', $this->documentoInedito($this->route('client'))],
             'cpf' => ['nullable', 'string', 'max:20'],
             'rg' => ['nullable', 'string', 'max:30'],
             'dt_nascimento' => ['nullable', 'date'],

@@ -446,6 +446,84 @@ class ClientCrudTest extends TestCase
         $this->assertSame(1, Client::where('document', '12.345.678/0001-95')->count());
     }
 
+    /**
+     * O erro de documento repetido tem de dizer de quem é o cadastro existente.
+     *
+     * Um "já está cadastrado" seco não conta que o registro acabou de ser criado,
+     * e a reação natural do usuário é salvar de novo — foi o que aconteceu em
+     * produção, quatro POSTs seguidos para a mesma pessoa.
+     */
+    public function test_store_duplicado_aponta_o_cadastro_que_ja_existe(): void
+    {
+        $existente = Client::factory()->create([
+            'name' => 'TANIA REGINA ALVES DA SILVA MARQUES',
+            'document' => '12.345.678/0001-95',
+        ]);
+
+        $response = $this->actingAs($this->userComRole())
+            ->from(route('clients.create'))
+            ->post(route('clients.store'), $this->payloadValido());
+
+        $response->assertSessionHasErrors([
+            'document' => 'Já existe cadastro com este CNPJ / CPF: TANIA REGINA ALVES DA SILVA MARQUES.',
+        ]);
+
+        $response->assertSessionHas('cliente_duplicado', [
+            'id' => $existente->id,
+            'name' => 'TANIA REGINA ALVES DA SILVA MARQUES',
+        ]);
+    }
+
+    /** O link do flash precisa chegar renderizado na tela de volta. */
+    public function test_tela_de_criacao_mostra_link_para_o_cadastro_duplicado(): void
+    {
+        $existente = Client::factory()->create([
+            'name' => 'TANIA REGINA ALVES DA SILVA MARQUES',
+            'document' => '12.345.678/0001-95',
+        ]);
+
+        $user = $this->userComRole();
+
+        $this->actingAs($user)
+            ->from(route('clients.create'))
+            ->post(route('clients.store'), $this->payloadValido());
+
+        $tela = $this->actingAs($user)->get(route('clients.create'));
+
+        $tela->assertOk();
+        $tela->assertSee(route('clients.show', $existente), escape: false);
+        $tela->assertSee('Abrir o cadastro de TANIA REGINA ALVES DA SILVA MARQUES');
+    }
+
+    /**
+     * Guarda do lang/pt_BR/validation.php.
+     *
+     * Sem esse arquivo o Laravel devolve a chave crua da regra — a tela chegou a
+     * mostrar "validation.unique" para o usuário. APP_LOCALE e
+     * APP_FALLBACK_LOCALE são os dois pt_BR, então não há idioma de reserva.
+     */
+    public function test_mensagens_de_validacao_saem_em_portugues(): void
+    {
+        $response = $this->actingAs($this->userComRole())
+            ->from(route('clients.create'))
+            ->post(route('clients.store'), $this->payloadValido(['name' => '', 'document' => '']));
+
+        $erros = session('errors')->getBag('default');
+
+        foreach (['name', 'document'] as $campo) {
+            $mensagem = $erros->first($campo);
+
+            $this->assertStringNotContainsString(
+                'validation.',
+                $mensagem,
+                "A mensagem de `{$campo}` saiu como chave de tradução: {$mensagem}"
+            );
+        }
+
+        $this->assertSame('O campo Nome / Razão Social é obrigatório.', $erros->first('name'));
+        $this->assertSame('O campo CNPJ / CPF é obrigatório.', $erros->first('document'));
+    }
+
     public function test_store_exige_name(): void
     {
         $response = $this->actingAs($this->userComRole())
@@ -495,7 +573,69 @@ class ClientCrudTest extends TestCase
         $this->assertDatabaseHas('clients', ['document' => '98.765.432/0001-98']);
     }
 
+    // --------------------------------------------------------- ABA CONTATOS
+
+    /**
+     * A aba de contatos não pagina: ela existe para varrer a lista inteira atrás
+     * de uma pessoa, e paginar de 10 em 10 escondia justamente quem se procurava.
+     */
+    public function test_aba_contatos_lista_todos_sem_paginar(): void
+    {
+        $user = $this->userComRole();
+        $client = Client::factory()->create(['document' => '12.345.678/0001-95']);
+
+        foreach (range(1, 23) as $i) {
+            $client->contatos()->create([
+                'user_id' => $user->id,
+                'nome' => "CONTATO NUMERO {$i}",
+            ]);
+        }
+
+        $response = $this->actingAs($user)
+            ->get(route('clients.show', ['client' => $client, 'tab' => 'contatos']));
+
+        $response->assertOk();
+
+        // O 23º só aparece se nada tiver sido cortado na décima linha.
+        foreach ([1, 10, 11, 23] as $i) {
+            $response->assertSee("CONTATO NUMERO {$i}");
+        }
+
+        $response->assertSee('23 pessoas vinculadas a este cliente.');
+        $response->assertDontSee('contacts_page');
+    }
+
     // --------------------------------------------------------------- UPDATE
+
+    /**
+     * A edição trocou o `Rule::unique()->ignore()` por regra própria; o cliente
+     * continua livre para manter o próprio documento (coberto em
+     * test_update_altera_campo_e_grava_client_audit_log), mas não pode tomar o
+     * de outro cadastro.
+     */
+    public function test_update_rejeita_document_de_outro_cliente(): void
+    {
+        $outro = Client::factory()->create([
+            'name' => 'ACME ADMINISTRADORA DE CONSORCIOS LTDA',
+            'document' => '12.345.678/0001-95',
+        ]);
+
+        $client = Client::factory()->create(['document' => '99.888.777/0001-11']);
+
+        $response = $this->actingAs($this->userComRole())
+            ->from(route('clients.edit', $client))
+            ->put(route('clients.update', $client), [
+                'name' => 'NOME QUALQUER LTDA',
+                'document' => '12.345.678/0001-95',
+            ]);
+
+        $response->assertSessionHasErrors([
+            'document' => 'Já existe cadastro com este CNPJ / CPF: ACME ADMINISTRADORA DE CONSORCIOS LTDA.',
+        ]);
+        $response->assertSessionHas('cliente_duplicado', ['id' => $outro->id, 'name' => $outro->name]);
+
+        $this->assertSame('99.888.777/0001-11', $client->fresh()->document);
+    }
 
     /**
      * Desmarcar um checkbox tem de gravar false — e não sumir em silêncio.

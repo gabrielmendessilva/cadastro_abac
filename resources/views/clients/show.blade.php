@@ -142,7 +142,7 @@
                                     {{ $isNao ? 'border-slate-200 bg-slate-50 text-slate-500 font-semibold' : '' }}
                                     {{ !$isBool ? (($hint['pending'] ?? false) && empty($value) ? 'border-amber-200 bg-amber-50' : 'border-slate-200 bg-slate-50') : '' }}
                                     px-4 py-3 text-sm text-slate-800">
-                                    {{ $value ?: (($hint['pending'] ?? false) ? '(definir com o cliente)' : '-') }}
+                                    {{ $value ?: (($hint['pending'] ?? false) ? '' : '-') }}
                                 </div>
                             </div>
                         @endforeach
@@ -647,7 +647,7 @@
                 @php
                     $contactSortUrl = function (string $column) use ($client, $contactSort, $contactDir) {
                         return route('clients.show', array_merge(
-                            request()->except(['contacts_page', 'contact_sort', 'contact_dir']),
+                            request()->except(['contact_sort', 'contact_dir']),
                             [
                                 'client' => $client,
                                 'tab' => 'contatos',
@@ -662,7 +662,9 @@
                     <div class="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
                         <div>
                             <h2 class="text-lg font-semibold text-slate-900">Contatos</h2>
-                            <p class="text-sm text-slate-500">Pessoas vinculadas a este cliente.</p>
+                            <p class="text-sm text-slate-500">
+                                {{ $contacts->count() }} {{ $contacts->count() === 1 ? 'pessoa vinculada' : 'pessoas vinculadas' }} a este cliente.
+                            </p>
                         </div>
 
                         @can('clients.edit')
@@ -800,7 +802,6 @@
                         </div>
                     </div>
 
-                    {{ $contacts->links() }}
 
                     @can('clients.edit')
                         <div x-show="createOpen" x-cloak class="fixed inset-0 z-[9999] overflow-y-auto bg-black/50">

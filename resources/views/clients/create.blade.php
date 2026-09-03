@@ -27,6 +27,14 @@
                         <li>{{ $error }}</li>
                     @endforeach
                 </ul>
+                @if ($duplicado = session('cliente_duplicado'))
+                    {{-- O documento recusado já é de outro cadastro: caminho direto até ele,
+                         senão a saída do usuário é tentar salvar de novo. --}}
+                    <a href="{{ route('clients.show', $duplicado['id']) }}"
+                        class="mt-2 inline-block font-semibold underline underline-offset-2 hover:text-rose-900">
+                        Abrir o cadastro de {{ $duplicado['name'] }} &rarr;
+                    </a>
+                @endif
             </div>
         @endif
 

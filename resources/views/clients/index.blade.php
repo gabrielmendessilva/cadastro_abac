@@ -120,9 +120,27 @@
 
     <div class="overflow-x-auto">
         <table class="min-w-full text-sm">
+            @php
+                // Link de ordenação por nome: alterna asc/desc e preserva os
+                // filtros/busca; volta pra página 1 (a ordem muda, a paginação antiga não vale).
+                $nomeSortUrl = request()->fullUrlWithQuery([
+                    'sort' => 'name',
+                    'dir' => $ordenarPor === 'name' && $direcao === 'asc' ? 'desc' : 'asc',
+                    'page' => null,
+                ]);
+            @endphp
             <thead>
                 <tr class="border-b border-slate-200 text-left text-slate-500">
-                    <th class="py-3 pr-4">Nome</th>
+                    <th class="py-3 pr-4">
+                        <a href="{{ $nomeSortUrl }}" class="inline-flex items-center gap-1 hover:text-slate-900">
+                            Nome
+                            @if ($ordenarPor === 'name')
+                                <span class="text-slate-900">{{ $direcao === 'asc' ? '▲' : '▼' }}</span>
+                            @else
+                                <span class="text-slate-300">↕</span>
+                            @endif
+                        </a>
+                    </th>
                     <th class="py-3 pr-4">Documento</th>
                     <th class="py-3 pr-4">Cidade/UF</th>
                     <th class="py-3 pr-4">Docs</th>

@@ -24,6 +24,14 @@
                         <li>{{ $error }}</li>
                     @endforeach
                 </ul>
+                @if ($duplicado = session('cliente_duplicado'))
+                    {{-- O documento recusado já é de outro cadastro: caminho direto até ele,
+                         senão a saída do usuário é tentar salvar de novo. --}}
+                    <a href="{{ route('clients.show', $duplicado['id']) }}"
+                        class="mt-2 inline-block font-semibold underline underline-offset-2 hover:text-rose-900">
+                        Abrir o cadastro de {{ $duplicado['name'] }} &rarr;
+                    </a>
+                @endif
             </div>
         @endif
 
@@ -80,10 +88,10 @@
                         <label class="mb-1 block text-sm font-medium text-slate-700">
                             Sub Categoria <span class="ml-1 text-xs text-slate-400" title="Subcategoria vinculada à Categoria — confirmar com o cliente.">ⓘ</span>
                         </label>
-                        <input type="text" name="classificacao" value="{{ old('classificacao', $client->classificacao) }}" placeholder="(definir com o cliente)" class="w-full rounded-xl border border-slate-300 px-4 py-2.5 text-sm">
+                        <input type="text" name="classificacao" value="{{ old('classificacao', $client->classificacao) }}" placeholder="" class="w-full rounded-xl border border-slate-300 px-4 py-2.5 text-sm">
                     </div>
                     <div>
-                        <label class="mb-1 block text-sm font-medium text-slate-700">CNPJ / CPF</label>
+                        <label class="mb-1 block text-sm font-medium text-slate-700">CNPJ</label>
                         <input type="text" name="document" value="{{ old('document', $client->document) }}" required class="w-full rounded-xl border border-slate-300 px-4 py-2.5 text-sm">
                     </div>
                     <div>
@@ -155,13 +163,13 @@
                         <label class="mb-1 block text-sm font-medium text-slate-700">
                             Situação ABAC <span class="ml-1 text-xs text-slate-400" title="Definição pendente — confirmar com o cliente.">ⓘ</span>
                         </label>
-                        <input type="text" name="situacao_abac" value="{{ old('situacao_abac', $client->situacao_abac) }}" placeholder="(definir com o cliente)" class="w-full rounded-xl border border-slate-300 px-4 py-2.5 text-sm">
+                        <input type="text" name="situacao_abac" value="{{ old('situacao_abac', $client->situacao_abac) }}" placeholder="" class="w-full rounded-xl border border-slate-300 px-4 py-2.5 text-sm">
                     </div>
                     <div>
                         <label class="mb-1 block text-sm font-medium text-slate-700">
                             Classificação Administradora <span class="ml-1 text-xs text-slate-400" title="Definição pendente — confirmar com o cliente.">ⓘ</span>
                         </label>
-                        <input type="text" name="classificao_administradora" value="{{ old('classificao_administradora', $client->classificao_administradora) }}" placeholder="(definir com o cliente)" class="w-full rounded-xl border border-slate-300 px-4 py-2.5 text-sm">
+                        <input type="text" name="classificao_administradora" value="{{ old('classificao_administradora', $client->classificao_administradora) }}" placeholder="" class="w-full rounded-xl border border-slate-300 px-4 py-2.5 text-sm">
                     </div>
                 </div>
             </div>

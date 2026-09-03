@@ -16,6 +16,15 @@ final readonly class RmImportOptions
         public int $chunkSize = 300,
         public bool $backfill = true,
         /**
+         * Preenche só endereço, e só de cliente que já existe aqui e está sem
+         * nenhum. Não cria cliente, não toca em contato, centro de custo, site,
+         * campos opcionais nem status — nem quando $backfill está ligado.
+         *
+         * Existe porque o buraco de endereço precisava ser tapado sem que a
+         * mesma execução mexesse em qualquer outra coisa do cadastro.
+         */
+        public bool $somenteEnderecos = false,
+        /**
          * Desativa em clients quem está no RM sem FCFOCOMPL.STATUS = 'OK' e
          * OCORRENCIA = 'OK'. Independe de $backfill: não é preencher buraco em
          * cadastro existente, é a regra de status vinda do RM.

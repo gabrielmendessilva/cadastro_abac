@@ -23,6 +23,9 @@ final class RmImportReport
 
     public int $enderecosCriados = 0;
 
+    /** Endereços criados em cliente que já existia e estava sem nenhum. */
+    public int $backfillEnderecos = 0;
+
     public int $contatosCriados = 0;
 
     public int $contatosPuladosEmail = 0;
@@ -109,7 +112,8 @@ final class RmImportReport
             ['Clientes pulados (documento inválido)', $this->clientsPuladosInvalidos],
             ['CNPJ duplicado dentro do RM', $this->duplicadosNoRm],
             ['Clientes desativados (cadastro fora de ordem no RM)', $this->clientsDesativados],
-            ['Endereços criados', $this->enderecosCriados],
+            ['Endereços criados (clientes novos)', $this->enderecosCriados],
+            ['Endereços criados (clientes existentes)', $this->backfillEnderecos],
             ['Contatos criados', $this->contatosCriados],
             ['Contatos pulados (e-mail já existia)', $this->contatosPuladosEmail],
             ['Contatos pulados (nome já existia)', $this->contatosPuladosNome],
@@ -154,6 +158,7 @@ final class RmImportReport
             'duplicados_no_rm' => $this->duplicadosNoRm,
             'clients_desativados' => $this->clientsDesativados,
             'enderecos_criados' => $this->enderecosCriados,
+            'enderecos_criados_existentes' => $this->backfillEnderecos,
             'contatos_criados' => $this->contatosCriados,
             'contatos_pulados_email' => $this->contatosPuladosEmail,
             'contatos_pulados_nome' => $this->contatosPuladosNome,

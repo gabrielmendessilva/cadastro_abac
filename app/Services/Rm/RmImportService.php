@@ -123,6 +123,9 @@ class RmImportService
     /** @var array<int,true> clients.id que já têm rede social do tipo 'site' */
     private array $siteExistente = [];
 
+    /** @var array<int,true> clients.id que já têm ao menos uma linha em client_enderecos */
+    private array $enderecoExistente = [];
+
     /** @var array<string,string> "coligada|codtcf" => descrição do tipo de cli/for (FTCF) */
     private array $tiposCliFor = [];
 
@@ -152,6 +155,7 @@ class RmImportService
             'coligada' => $options->coligada,
             'chunk' => $options->chunkSize,
             'backfill' => $options->backfill,
+            'somente_enderecos' => $options->somenteEnderecos,
         ]);
 
         $this->reader->preflight();
@@ -214,7 +218,9 @@ class RmImportService
             );
         });
 
-        $this->desativaForaDeOrdem($options, $report);
+        if (! $options->somenteEnderecos) {
+            $this->desativaForaDeOrdem($options, $report);
+        }
 
         $this->logger->info('rm.import.done', $report->toArray());
 
@@ -233,6 +239,7 @@ class RmImportService
         $this->emOrdemNoRm = [];
         $this->statusAtual = [];
         $this->siteExistente = [];
+        $this->enderecoExistente = [];
         $this->tiposCliFor = [];
         $this->comitesDominio = [];
         $this->comitesExistentes = [];
@@ -273,6 +280,18 @@ class RmImportService
 
         $clientId = $this->byDigits[$digits] ?? null;
 
+        // Sai antes de tudo: neste modo a execução não cria cliente, não passa
+        // pelos contatos e não chega no desativaForaDeOrdem.
+        if ($options->somenteEnderecos) {
+            if ($clientId !== null) {
+                $this->backfillEnderecos($clientId, $fcfo, $options, $report);
+            }
+
+            $this->rmSeenDigits[$digits] = true;
+
+            return;
+        }
+
         if ($clientId !== null) {
             if (isset($this->rmSeenDigits[$digits])) {
                 $report->duplicadosNoRm++;
@@ -296,6 +315,8 @@ class RmImportService
                 }
 
                 $this->backfillCamposRm($clientId, $fcfo, $fcfoCompl, $options, $report);
+
+                $this->backfillEnderecos($clientId, $fcfo, $options, $report);
 
                 $site = $this->resolveSite($fcfo, $report);
 
@@ -726,6 +747,48 @@ class RmImportService
         $this->siteExistente[$clientId] = true;
 
         return true;
+    }
+
+    /**
+     * Endereço de cliente que já existia aqui dentro.
+     *
+     * Só entra em quem está sem NENHUM endereço. O RM não é fonte de verdade de
+     * quem já foi endereçado no app, e sobrescrever apagaria correção feita à
+     * mão; completar linha a linha teria o mesmo risco, porque um endereço
+     * parcial daqui pode ser mais certo que o do RM.
+     *
+     * Este era o buraco: `client_enderecos` só era escrito por createClient(),
+     * então cliente que já existia quando o RM rodou ficava sem cidade/estado na
+     * lista para sempre — com o endereço parado na FCFO.
+     *
+     * @param array<string,mixed> $fcfo
+     */
+    private function backfillEnderecos(
+        int $clientId,
+        array $fcfo,
+        RmImportOptions $options,
+        RmImportReport $report,
+    ): void {
+        if (isset($this->enderecoExistente[$clientId])) {
+            return;
+        }
+
+        $enderecos = $this->buildEnderecos($fcfo);
+
+        if ($enderecos === []) {
+            return;
+        }
+
+        if (! $options->dryRun) {
+            foreach ($enderecos as $endereco) {
+                ClientEndereco::create($endereco + ['client_id' => $clientId]);
+            }
+        }
+
+        // Marca mesmo em dry-run: o mesmo CNPJ se repete na FCFO e sem isso a
+        // segunda linha contaria os mesmos endereços de novo no relatório.
+        $this->enderecoExistente[$clientId] = true;
+        $report->backfillEnderecos += count($enderecos);
     }
 
     /**
@@ -1352,6 +1415,10 @@ class RmImportService
 
         foreach (DB::table('client_redes_sociais')->where('tipo', 'site')->pluck('client_id') as $clientId) {
             $this->siteExistente[(int) $clientId] = true;
+        }
+
+        foreach (DB::table('client_enderecos')->distinct()->pluck('client_id') as $clientId) {
+            $this->enderecoExistente[(int) $clientId] = true;
         }
 
         // Lista de domínio dos comitês: o RM escreve o nome à mão, com grafias e

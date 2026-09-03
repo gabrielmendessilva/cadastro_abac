@@ -24,13 +24,15 @@ class RmImport extends Command
         {--cnpj=* : Restringe a importação aos CNPJ/CPF informados (com ou sem máscara)}
         {--chunk= : Tamanho do chunk de leitura (default: config rm.import.chunk)}
         {--no-backfill : Não completar clients já existentes (centro de custo, site e campos opcionais do RM)}
-        {--no-desativar : Não desativar quem está no RM com STATUS/OCORRENCIA diferente de OK}';
+        {--no-desativar : Não desativar quem está no RM com STATUS/OCORRENCIA diferente de OK}
+        {--somente-enderecos : Preenche SÓ endereço, e só de cliente que já existe aqui sem nenhum. Não cria cliente nem toca em contato, centro de custo, site, campos opcionais ou status}';
 
     protected $description = 'Importa clientes/fornecedores, contatos e centros de custo do TOTVS RM (SQL Server)';
 
     public function handle(RmImportService $service, RmReaderInterface $reader): int
     {
         $dryRun = (bool) $this->option('dry-run');
+        $somenteEnderecos = (bool) $this->option('somente-enderecos');
         $limit = $this->option('limit') !== null ? max(0, (int) $this->option('limit')) : null;
         $coligada = $this->option('coligada') !== null ? (int) $this->option('coligada') : null;
         $documentos = array_values(array_filter((array) $this->option('cnpj')));
@@ -40,6 +42,10 @@ class RmImport extends Command
 
         if ($dryRun) {
             $this->warn('DRY-RUN: nenhuma escrita será feita no banco.');
+        }
+
+        if ($somenteEnderecos) {
+            $this->warn('SOMENTE ENDEREÇOS: a única escrita será em client_enderecos, e só para cliente que já existe aqui e está sem nenhum endereço.');
         }
 
         try {
@@ -70,6 +76,7 @@ class RmImport extends Command
                 chunkSize: $chunk,
                 documentos: $documentos,
                 backfill: ! $this->option('no-backfill') && (bool) config('rm.import.backfill', true),
+                somenteEnderecos: $somenteEnderecos,
                 desativarForaDeOrdem: ! $this->option('no-desativar')
                     && (bool) config('rm.import.desativar_fora_de_ordem', true),
                 includeContatoCompl: (bool) config('rm.import.include_contato_compl', true),

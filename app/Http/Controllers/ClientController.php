@@ -22,6 +22,11 @@ class ClientController extends Controller
         $tiposSelecionados = $this->tiposSelecionados($request);
         $categoriasDoFiltro = $this->categoriasDoFiltro($tiposSelecionados);
 
+        // Ordenação da lista. Só 'name' é ordenável pela tela; sem escolha, cai
+        // no padrão de sempre (mais recentes primeiro).
+        $ordenarPor = $request->query('sort') === 'name' ? 'name' : null;
+        $direcao = $request->query('dir') === 'desc' ? 'desc' : 'asc';
+
         $clients = Client::query()
             ->withCount('documents')
             ->with(['enderecos' => fn ($q) => $q->orderByRaw("FIELD(tipo, 'principal','pagamento','entrega') ASC")->limit(1)])
@@ -57,7 +62,11 @@ class ClientController extends Controller
             ->when($categoriasDoFiltro !== null, fn ($query) => $query->whereIn('categoria', $categoriasDoFiltro))
             ->when($request->filled('state'), fn($query) => $query->whereHas('enderecos', fn($q) => $q->where('estado', $request->string('state'))))
             ->when($request->filled('city'), fn($query) => $query->whereHas('enderecos', fn($q) => $q->where('municipio', 'like', '%' . $request->string('city') . '%')))
-            ->latest()
+            ->when(
+                $ordenarPor === 'name',
+                fn ($query) => $query->orderBy('name', $direcao),
+                fn ($query) => $query->latest(),
+            )
             ->paginate(10)
             ->withQueryString();
 
@@ -68,6 +77,8 @@ class ClientController extends Controller
             'mostraNaoAssociadas',
             'vinculoExigido',
             'tiposSelecionados',
+            'ordenarPor',
+            'direcao',
         ));
     }
 
@@ -260,8 +271,10 @@ class ClientController extends Controller
                     ->orderBy($contactSort, $contactDir),
                 fn ($query) => $query->latest()
             )
-            ->paginate(10, ['*'], 'contacts_page')
-            ->withQueryString();
+            // Sem paginação de propósito: a aba é usada para varrer a lista inteira
+            // atrás de uma pessoa, e o maior cliente da base tem 116 contatos —
+            // volume que a tabela aguenta de uma vez.
+            ->get();
     
         $opcionais = $client->opcionais()
             ->when($request->filled('opcional_search'), function ($query) use ($request) {

@@ -247,11 +247,13 @@ class RmImportServiceTest extends TestCase
         int $chunk = 2,
         bool $desativarForaDeOrdem = true,
         array $documentos = [],
+        bool $somenteEnderecos = false,
     ): RmImportOptions {
         return new RmImportOptions(
             dryRun: $dryRun,
             chunkSize: $chunk,
             backfill: $backfill,
+            somenteEnderecos: $somenteEnderecos,
             desativarForaDeOrdem: $desativarForaDeOrdem,
             documentos: $documentos,
         );
@@ -638,6 +640,158 @@ class RmImportServiceTest extends TestCase
         $this->assertSame('MANTEM', $row->name);
         $this->assertSame('2020-01-01 00:00:00', (string) $row->updated_at);
         $this->assertSame(0, DB::table('client_audit_logs')->count());
+    }
+
+    /**
+     * O buraco que deixou 160 clientes sem cidade/estado na lista.
+     *
+     * `client_enderecos` só era escrito por createClient(); quem já existia
+     * quando o RM rodou era contado como "pulado (CNPJ já existia)" e ficava sem
+     * endereço para sempre, mesmo com a FCFO tendo o endereço completo.
+     */
+    public function test_cliente_existente_sem_endereco_recebe_o_do_rm(): void
+    {
+        $clientId = DB::table('clients')->insertGetId([
+            'name' => 'MANTEM', 'document' => '12.345.678/0001-95',
+            'created_at' => '2020-01-01 00:00:00', 'updated_at' => '2020-01-01 00:00:00',
+        ]);
+
+        $report = $this->service(new FakeRmReader(fcfo: [$this->fcfoRow()]))
+            ->run($this->importOptions());
+
+        $enderecos = DB::table('client_enderecos')->where('client_id', $clientId)->orderBy('id')->get();
+
+        $this->assertSame(['principal', 'pagamento'], $enderecos->pluck('tipo')->all());
+        $this->assertSame('São Paulo', $enderecos[0]->municipio);
+        $this->assertSame('SP', $enderecos[0]->estado);
+        $this->assertSame(2, $report->backfillEnderecos);
+        // Endereço de cliente existente não conta como "criados" do fluxo de criação.
+        $this->assertSame(0, $report->enderecosCriados);
+
+        // O cadastro em si continua intocado.
+        $row = DB::table('clients')->where('id', $clientId)->first();
+        $this->assertSame('MANTEM', $row->name);
+        $this->assertSame('2020-01-01 00:00:00', (string) $row->updated_at);
+    }
+
+    /**
+     * Endereço conferido à mão aqui dentro vale mais que o do RM — inclusive um
+     * parcial. Havendo qualquer linha, o importador não encosta.
+     */
+    public function test_cliente_que_ja_tem_endereco_nao_recebe_o_do_rm(): void
+    {
+        $clientId = DB::table('clients')->insertGetId([
+            'name' => 'MANTEM', 'document' => '12.345.678/0001-95',
+            'created_at' => now(), 'updated_at' => now(),
+        ]);
+
+        DB::table('client_enderecos')->insert([
+            'client_id' => $clientId, 'tipo' => 'principal',
+            'cep' => '99999-999', 'rua' => 'RUA CONFERIDA A MAO', 'numero' => '1',
+            'bairro' => 'Centro', 'pais' => 'Brasil', 'estado' => 'RJ',
+            'cod_ibge' => '', 'municipio' => 'Niterói',
+            'created_at' => now(), 'updated_at' => now(),
+        ]);
+
+        $report = $this->service(new FakeRmReader(fcfo: [$this->fcfoRow()]))
+            ->run($this->importOptions());
+
+        $enderecos = DB::table('client_enderecos')->where('client_id', $clientId)->get();
+
+        $this->assertCount(1, $enderecos);
+        $this->assertSame('RUA CONFERIDA A MAO', $enderecos[0]->rua);
+        $this->assertSame('Niterói', $enderecos[0]->municipio);
+        $this->assertSame(0, $report->backfillEnderecos);
+    }
+
+    public function test_backfill_desligado_nao_cria_endereco_para_existente(): void
+    {
+        DB::table('clients')->insert([
+            'name' => 'MANTEM', 'document' => '12.345.678/0001-95',
+            'created_at' => now(), 'updated_at' => now(),
+        ]);
+
+        $report = $this->service(new FakeRmReader(fcfo: [$this->fcfoRow()]))
+            ->run($this->importOptions(backfill: false));
+
+        $this->assertSame(0, $report->backfillEnderecos);
+        $this->assertSame(0, DB::table('client_enderecos')->count());
+    }
+
+    /**
+     * Modo `--somente-enderecos`: a única tabela que muda é client_enderecos.
+     *
+     * O cliente existente aqui está com tudo o que o backfill normal preencheria
+     * — campos opcionais vazios, sem centro de custo, sem site, desativado à mão
+     * e com a FCFOCOMPL em ordem — justamente para que qualquer escrita a mais
+     * apareça como falha.
+     */
+    public function test_somente_enderecos_nao_escreve_em_mais_nada(): void
+    {
+        $clientId = DB::table('clients')->insertGetId([
+            'name' => 'MANTEM', 'document' => '12.345.678/0001-95',
+            'status' => false,
+            'created_at' => '2020-01-01 00:00:00', 'updated_at' => '2020-01-01 00:00:00',
+        ]);
+
+        $reader = new FakeRmReader(
+            fcfo: [$this->fcfoRow()],
+            contatos: [['CODCOLIGADA' => 1, 'CODCFO' => '000123', 'NOME' => 'Maria Souza', 'EMAIL' => 'maria@x.com']],
+            defaults: [['CODCOLIGADA' => 1, 'CODCOLCFO' => 1, 'CODCFO' => '000123', 'CODCCUSTO' => '01.001']],
+            centrosCusto: [['CODCOLIGADA' => 1, 'CODCCUSTO' => '01.001', 'NOME' => 'Administração', 'CODREDUZIDO' => null, 'CODCLASSIFICA' => null, 'ATIVO' => 1, 'PERMITELANC' => 1, 'RESPONSAVEL' => null]],
+            fcfoCompl: $this->fcfoComplEmOrdem(['1|000123']),
+        );
+
+        $report = $this->service($reader)->run($this->importOptions(somenteEnderecos: true));
+
+        // O que devia acontecer:
+        $this->assertSame(2, $report->backfillEnderecos);
+        $this->assertSame(2, DB::table('client_enderecos')->where('client_id', $clientId)->count());
+
+        // E nada além disso:
+        $this->assertSame(0, DB::table('client_contatos')->count(), 'contato não devia entrar');
+        $this->assertSame(0, DB::table('centros_custo')->count(), 'centro de custo não devia entrar');
+        $this->assertSame(0, DB::table('client_redes_sociais')->count(), 'site não devia entrar');
+        $this->assertSame(1, DB::table('clients')->count(), 'nenhum cliente novo devia ser criado');
+
+        $row = DB::table('clients')->where('id', $clientId)->first();
+        $this->assertSame('MANTEM', $row->name);
+        $this->assertSame('2020-01-01 00:00:00', (string) $row->updated_at);
+        $this->assertNull($row->num_filiacao_abac, 'campo opcional do RM não devia ser preenchido');
+        $this->assertNull($row->situacao_abac, 'situação do RM não devia ser preenchida');
+        $this->assertFalse((bool) $row->status, 'status não devia ser mexido');
+        $this->assertSame(0, $report->clientsDesativados);
+    }
+
+    /** No modo só-endereço um CNPJ que não existe aqui é ignorado, não criado. */
+    public function test_somente_enderecos_nao_cria_cliente_novo(): void
+    {
+        $report = $this->service(new FakeRmReader(fcfo: [$this->fcfoRow()]))
+            ->run($this->importOptions(somenteEnderecos: true));
+
+        $this->assertSame(0, DB::table('clients')->count());
+        $this->assertSame(0, DB::table('client_enderecos')->count());
+        $this->assertSame(0, $report->clientsCriados);
+        $this->assertSame(0, $report->backfillEnderecos);
+    }
+
+    /** O mesmo CNPJ repetido na FCFO não pode render dois jogos de endereço. */
+    public function test_somente_enderecos_nao_duplica_com_cnpj_repetido_no_rm(): void
+    {
+        DB::table('clients')->insert([
+            'name' => 'MANTEM', 'document' => '12.345.678/0001-95',
+            'created_at' => now(), 'updated_at' => now(),
+        ]);
+
+        $reader = new FakeRmReader(fcfo: [
+            $this->fcfoRow(),
+            $this->fcfoRow(['CODCFO' => '000999']),
+        ]);
+
+        $report = $this->service($reader)->run($this->importOptions(somenteEnderecos: true));
+
+        $this->assertSame(2, DB::table('client_enderecos')->count());
+        $this->assertSame(2, $report->backfillEnderecos);
     }
 
     public function test_backfill_desligado_nao_cria_centro_custo_para_existente(): void
