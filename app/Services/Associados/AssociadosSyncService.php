@@ -36,7 +36,8 @@ use Throwable;
  *   (config('associados.sync.contact_user_id')). Nome = _representante_nome_completo
  *   quando houver; senão first_name + last_name, senão nickname; usuário sem
  *   nenhuma das metas cai no display_name.
- *   Função = a primeira das METAS_FUNCAO com valor. Desvio deliberado do legado: valor
+ *   Função = a primeira das METAS_FUNCAO com valor; telefones = METAS_TELEFONE.
+ *   Desvio deliberado do legado: valor
  *   vazio no WP nunca anula campo do contato (telefone, obs, a própria função)
  *   — o legado sobrescrevia com null o que fora preenchido à mão no CRUD.
  * - Endereço: metas de config('associados.endereco_meta_map') viram o endereço
@@ -88,6 +89,22 @@ class AssociadosSyncService
     ];
 
     /**
+     * De-para coluna de client_contatos => meta do WP com o telefone da pessoa.
+     *
+     * Aqui não há cadeia de fallback como em METAS_FUNCAO: cada coluna tem uma
+     * única origem. `_representante_telefone` está preenchida em 122 dos 134
+     * usuários e a secundária em 82.
+     *
+     * `_profissionais_telefone`/`_profissionais_celular` têm mais linhas (1.773 e
+     * 1.611) e ficam de fora: são de outra população de usuários do portal, não
+     * dos representantes das associadas.
+     */
+    private const METAS_TELEFONE = [
+        'telefone' => '_representante_telefone',
+        'telefone_2' => '_representante_telefone_secundario',
+    ];
+
+    /**
      * Colunas que o meta_map nunca pode apontar: identidade/chave, flags que o
      * próprio sync gerencia e campos de controle/auditoria. Além desta lista,
      * o preflight só aceita colunas de tipo textual (char/varchar/text).
@@ -129,6 +146,9 @@ class AssociadosSyncService
 
     /** @var array<int,?string> user_id => cargo do representante no WP */
     private array $funcaoPessoal = [];
+
+    /** @var array<int,array<string,?string>> user_id => [coluna de telefone => valor] */
+    private array $telefonesPessoais = [];
 
     /** @var array<int,array<string,string>> user_id => [meta_key mapeada => valor] */
     private array $metasPorUser = [];
@@ -262,6 +282,7 @@ class AssociadosSyncService
         $this->wpUsers = [];
         $this->nomePessoal = [];
         $this->funcaoPessoal = [];
+        $this->telefonesPessoais = [];
         $this->metasPorUser = [];
         $this->limits = ['clients' => [], 'client_contatos' => [], 'client_enderecos' => []];
         $this->hasObsCadastro = false;
@@ -649,10 +670,10 @@ class AssociadosSyncService
                 $this->wpUsers[(int) $user->ID] = $user;
             }
 
-            // Nome e função do contato: as metas do WP, por chave.
+            // Nome, função e telefones do contato: as metas do WP, por chave.
             $rows = $this->source()->table('wp_usermeta')
                 ->whereIn('user_id', $batch)
-                ->whereIn('meta_key', [...self::METAS_NOME_PESSOAL, ...self::METAS_FUNCAO])
+                ->whereIn('meta_key', [...self::METAS_NOME_PESSOAL, ...self::METAS_FUNCAO, ...array_values(self::METAS_TELEFONE)])
                 ->orderBy('umeta_id')
                 ->get(['user_id', 'meta_key', 'meta_value']);
 
@@ -667,6 +688,10 @@ class AssociadosSyncService
             foreach ($porUsuario as $userId => $metas) {
                 $this->nomePessoal[$userId] = $this->montaNomePessoal($metas);
                 $this->funcaoPessoal[$userId] = $this->montaFuncaoPessoal($metas);
+
+                foreach (self::METAS_TELEFONE as $coluna => $meta) {
+                    $this->telefonesPessoais[$userId][$coluna] = Normalizer::trimOrNull((string) ($metas[$meta] ?? ''));
+                }
             }
 
             if ($mappedKeys !== []) {
@@ -776,7 +801,7 @@ class AssociadosSyncService
             $rows = DB::table('client_contatos')
                 ->whereIn('client_id', $batch)
                 ->orderBy('id')
-                ->get(['id', 'client_id', 'email', 'nome', 'funcao']);
+                ->get(['id', 'client_id', 'email', 'nome', 'funcao', ...array_keys(self::METAS_TELEFONE)]);
 
             foreach ($rows as $row) {
                 $email = mb_strtolower(trim((string) $row->email));
@@ -785,11 +810,17 @@ class AssociadosSyncService
                     continue;
                 }
 
-                $state[(int) $row->client_id][$email] = [
+                $linha = [
                     'id' => (int) $row->id,
                     'nome' => Normalizer::trimOrNull((string) $row->nome),
                     'funcao' => Normalizer::trimOrNull((string) $row->funcao),
                 ];
+
+                foreach (array_keys(self::METAS_TELEFONE) as $coluna) {
+                    $linha[$coluna] = Normalizer::trimOrNull((string) $row->{$coluna});
+                }
+
+                $state[(int) $row->client_id][$email] = $linha;
             }
         }
 
@@ -854,6 +885,26 @@ class AssociadosSyncService
         array &$enderecoState,
     ): void {
         $userIds = $this->usersPorCnpj[$digits] ?? [];
+
+        if ($options->somenteContatos) {
+            $clientId = $this->byDigits[$digits] ?? null;
+
+            // Sem cliente no destino não há onde pendurar contato — e criá-lo
+            // seria justamente o que este modo promete não fazer.
+            if ($clientId === null) {
+                $report->cnpjsSemClientePulados++;
+                $this->warn($report, 'CNPJ ainda não existe no destino — pulado no modo somente-contatos', [
+                    'cnpj' => $digits,
+                ]);
+
+                return;
+            }
+
+            $this->sincronizarContatos($clientId, $digits, $userIds, $options, $report, $contactState);
+
+            return;
+        }
+
         $resolved = $this->resolveMetas($digits, $userIds, $report, array_merge(
             array_keys($this->metaPlan),
             array_keys($this->enderecoPlan),
@@ -1093,6 +1144,16 @@ class AssociadosSyncService
 
             $funcao = $this->truncate('client_contatos', 'funcao', $this->funcaoPessoal[$userId] ?? null);
 
+            $telefones = [];
+
+            foreach (array_keys(self::METAS_TELEFONE) as $coluna) {
+                $telefones[$coluna] = $this->truncate(
+                    'client_contatos',
+                    $coluna,
+                    $this->telefonesPessoais[$userId][$coluna] ?? null,
+                );
+            }
+
             $existing = $contactState[$clientId][$email] ?? null;
 
             if ($existing === null) {
@@ -1104,11 +1165,11 @@ class AssociadosSyncService
                         'funcao' => $funcao,
                         'email' => $email,
                         'unlock_whatsApp' => false,
-                    ]);
+                    ] + $telefones);
                 }
 
                 $report->contatosCriados++;
-                $contactState[$clientId][$email] = ['id' => null, 'nome' => $nome, 'funcao' => $funcao];
+                $contactState[$clientId][$email] = ['id' => null, 'nome' => $nome, 'funcao' => $funcao] + $telefones;
 
                 continue;
             }
@@ -1123,6 +1184,12 @@ class AssociadosSyncService
 
             if ($funcao !== null && $funcao !== ($existing['funcao'] ?? null)) {
                 $mudancas['funcao'] = $funcao;
+            }
+
+            foreach ($telefones as $coluna => $valor) {
+                if ($valor !== null && $valor !== ($existing[$coluna] ?? null)) {
+                    $mudancas[$coluna] = $valor;
+                }
             }
 
             if ($mudancas === []) {

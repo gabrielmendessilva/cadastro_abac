@@ -22,6 +22,14 @@ final readonly class RmImportOptions
          */
         public bool $desativarForaDeOrdem = true,
         public bool $includeContatoCompl = true,
+        /**
+         * Restringe a leitura da FCFO a estes documentos (CNPJ/CPF, com ou sem
+         * máscara). Vazio = base inteira. É o que permite corrigir um cadastro
+         * pontual sem passar por cima de todos os outros.
+         *
+         * @var list<string>
+         */
+        public array $documentos = [],
         public int $maxWarningSamples = 200,
         /** Chamado a cada chunk processado com a quantidade de linhas — usado pela progress bar. */
         public ?Closure $onChunk = null,

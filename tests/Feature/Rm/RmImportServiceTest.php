@@ -186,6 +186,56 @@ class RmImportServiceTest extends TestCase
         }
     }
 
+    /**
+     * O filtro por documento existe para corrigir um cadastro pontual sem que a
+     * importação passe por cima de todos os outros.
+     */
+    public function test_filtro_por_documento_importa_so_o_cnpj_informado(): void
+    {
+        $reader = new FakeRmReader(
+            fcfo: [
+                $this->fcfoRow(['CODCFO' => '000123', 'CGCCFO' => '12.345.678/0001-95', 'NOME' => 'ALVO LTDA']),
+                $this->fcfoRow(['CODCFO' => '000124', 'CGCCFO' => '99.888.777/0001-11', 'NOME' => 'INTOCAVEL SA']),
+            ],
+            fcfoCompl: $this->fcfoComplEmOrdem(['1|000123', '1|000124']),
+        );
+
+        $this->service($reader)->run($this->importOptions(documentos: ['12.345.678/0001-95']));
+
+        $this->assertDatabaseHas('clients', ['name' => 'ALVO LTDA']);
+        $this->assertDatabaseMissing('clients', ['name' => 'INTOCAVEL SA']);
+    }
+
+    /** Máscara é detalhe de digitação: o filtro tem de casar com e sem ela. */
+    public function test_filtro_por_documento_ignora_a_mascara(): void
+    {
+        $reader = new FakeRmReader(
+            fcfo: [$this->fcfoRow(['CGCCFO' => '12.345.678/0001-95', 'NOME' => 'ALVO LTDA'])],
+            fcfoCompl: $this->fcfoComplEmOrdem(['1|000123']),
+        );
+
+        $this->service($reader)->run($this->importOptions(documentos: ['12345678000195']));
+
+        $this->assertDatabaseHas('clients', ['name' => 'ALVO LTDA']);
+    }
+
+    /** Sem filtro nada muda: a lista vazia continua significando "base inteira". */
+    public function test_sem_filtro_importa_todos(): void
+    {
+        $reader = new FakeRmReader(
+            fcfo: [
+                $this->fcfoRow(['CODCFO' => '000123', 'CGCCFO' => '12.345.678/0001-95', 'NOME' => 'PRIMEIRA LTDA']),
+                $this->fcfoRow(['CODCFO' => '000124', 'CGCCFO' => '99.888.777/0001-11', 'NOME' => 'SEGUNDA SA']),
+            ],
+            fcfoCompl: $this->fcfoComplEmOrdem(['1|000123', '1|000124']),
+        );
+
+        $this->service($reader)->run($this->importOptions());
+
+        $this->assertDatabaseHas('clients', ['name' => 'PRIMEIRA LTDA']);
+        $this->assertDatabaseHas('clients', ['name' => 'SEGUNDA SA']);
+    }
+
     private function service(FakeRmReader $reader): RmImportService
     {
         return new RmImportService(reader: $reader, logger: new NullLogger());
@@ -196,12 +246,14 @@ class RmImportServiceTest extends TestCase
         bool $backfill = true,
         int $chunk = 2,
         bool $desativarForaDeOrdem = true,
+        array $documentos = [],
     ): RmImportOptions {
         return new RmImportOptions(
             dryRun: $dryRun,
             chunkSize: $chunk,
             backfill: $backfill,
             desativarForaDeOrdem: $desativarForaDeOrdem,
+            documentos: $documentos,
         );
     }
 

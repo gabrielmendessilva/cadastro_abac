@@ -75,6 +75,8 @@ return [
         // METAS_FUNCAO no service).
         '_representante_nome_completo',
         '_representante_funcao_cargo',
+        '_representante_telefone',
+        '_representante_telefone_secundario',
         '_representante_funcao',
         // Lixo interno do WP visto no censo da primeira execução real.
         'wp_elementor_enable_ai',

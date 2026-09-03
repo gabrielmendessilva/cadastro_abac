@@ -326,22 +326,51 @@ class ClientCrudTest extends TestCase
 
         // Os controles têm de chegar marcados, senão a tela mente sobre o que mostra.
         $response->assertSee('<option value="1" selected>Ativo</option>', false);
-        $response->assertSee('<input type="checkbox" name="associado" value="1" checked ', false);
+        $response->assertSee('<input type="checkbox" name="associadas" value="1" checked ', false);
+        $response->assertDontSee('name="nao_associadas" value="1" checked', false);
     }
 
-    /**
-     * Desmarcar "Somente associados" não inverte o filtro: solta a lista.
-     *
-     * O `associado=0` é o input hidden que acompanha a caixa — é o que o navegador
-     * manda quando ela está desmarcada.
-     */
-    public function test_index_com_associado_zero_mostra_associados_e_nao_associados(): void
+    /** Só "Não Associadas" marcada inverte o filtro. */
+    public function test_index_com_apenas_nao_associadas_marcada(): void
     {
         Client::factory()->create(['name' => 'ASSOCIADA ATIVA LTDA', 'associado_abac' => true]);
         Client::factory()->create(['name' => 'NAO ASSOCIADA SA', 'associado_abac' => false]);
 
         $response = $this->actingAs($this->userComRole())
-            ->get(route('clients.index', ['associado' => '0']));
+            ->get(route('clients.index', ['associadas' => '0', 'nao_associadas' => '1']));
+
+        $response->assertOk();
+        $response->assertSee('NAO ASSOCIADA SA');
+        $response->assertDontSee('ASSOCIADA ATIVA LTDA');
+    }
+
+    /** As duas marcadas cobrem a base inteira: o filtro sai de cena. */
+    public function test_index_com_as_duas_caixas_de_vinculo_marcadas_mostra_todos(): void
+    {
+        Client::factory()->create(['name' => 'ASSOCIADA ATIVA LTDA', 'associado_abac' => true]);
+        Client::factory()->create(['name' => 'NAO ASSOCIADA SA', 'associado_abac' => false]);
+
+        $response = $this->actingAs($this->userComRole())
+            ->get(route('clients.index', ['associadas' => '1', 'nao_associadas' => '1']));
+
+        $response->assertOk();
+        $response->assertSee('ASSOCIADA ATIVA LTDA');
+        $response->assertSee('NAO ASSOCIADA SA');
+    }
+
+    /**
+     * Nenhuma marcada também mostra todos, e não lista vazia.
+     *
+     * "Nem associada nem não associada" não existe na base — devolver nada seria
+     * um beco sem saída, então o filtro simplesmente sai.
+     */
+    public function test_index_sem_nenhuma_caixa_de_vinculo_marcada_mostra_todos(): void
+    {
+        Client::factory()->create(['name' => 'ASSOCIADA ATIVA LTDA', 'associado_abac' => true]);
+        Client::factory()->create(['name' => 'NAO ASSOCIADA SA', 'associado_abac' => false]);
+
+        $response = $this->actingAs($this->userComRole())
+            ->get(route('clients.index', ['associadas' => '0', 'nao_associadas' => '0']));
 
         $response->assertOk();
         $response->assertSee('ASSOCIADA ATIVA LTDA');
@@ -356,7 +385,7 @@ class ClientCrudTest extends TestCase
         Client::factory()->create(['name' => 'NAO ASSOCIADA SA', 'associado_abac' => false]);
 
         $response = $this->actingAs($this->userComRole())
-            ->get(route('clients.index', ['status' => '', 'associado' => '0']));
+            ->get(route('clients.index', ['status' => '', 'associadas' => '1', 'nao_associadas' => '1']));
 
         $response->assertOk();
         $response->assertSee('ASSOCIADA ATIVA LTDA');
@@ -467,6 +496,75 @@ class ClientCrudTest extends TestCase
     }
 
     // --------------------------------------------------------------- UPDATE
+
+    /**
+     * Desmarcar um checkbox tem de gravar false — e não sumir em silêncio.
+     *
+     * O bug: checkbox desmarcada não é enviada pelo navegador, e o
+     * UpdateClientRequest só normaliza o booleano quando a chave chega. Sem o
+     * <input type="hidden" value="0"> que hoje acompanha cada caixa no formulário,
+     * a chave sumia, ficava fora do validated(), o update() não tocava a coluna —
+     * e a tela ainda dizia "atualizado com sucesso". Nenhum dos seis booleanos
+     * podia ser desligado pela tela de edição.
+     *
+     * @param string $campo coluna booleana que o formulário edita por checkbox
+     */
+    #[DataProvider('booleanosDoFormularioDeEdicao')]
+    public function test_update_desmarca_booleano_do_formulario(string $campo): void
+    {
+        $client = Client::factory()->create([
+            'name' => 'ASSOCIACAO BRASILEIRA LTDA',
+            'document' => '12.345.678/0001-95',
+            $campo => true,
+        ]);
+
+        $response = $this->actingAs($this->userComRole())
+            ->put(route('clients.update', $client), [
+                'name' => 'ASSOCIACAO BRASILEIRA LTDA',
+                'document' => '12.345.678/0001-95',
+                // O que o navegador manda com a caixa desmarcada: só o hidden.
+                $campo => '0',
+            ]);
+
+        $response->assertSessionHasNoErrors();
+        $this->assertFalse(
+            (bool) $client->fresh()->{$campo},
+            "Desmarcar {$campo} no formulário não gravou false."
+        );
+    }
+
+    /** @return array<string,array{string}> */
+    public static function booleanosDoFormularioDeEdicao(): array
+    {
+        return [
+            'associado_abac' => ['associado_abac'],
+            'associado_sinac' => ['associado_sinac'],
+            'possui_outro_nome' => ['possui_outro_nome'],
+            'possui_contrato_ativo' => ['possui_contrato_ativo'],
+            'mandato_alerta' => ['mandato_alerta'],
+            'status' => ['status'],
+        ];
+    }
+
+    /** A caixa marcada continua gravando true — o hidden não pode vencer o checkbox. */
+    public function test_update_marca_booleano_do_formulario(): void
+    {
+        $client = Client::factory()->create([
+            'name' => 'ASSOCIACAO BRASILEIRA LTDA',
+            'document' => '12.345.678/0001-95',
+            'associado_abac' => false,
+        ]);
+
+        $this->actingAs($this->userComRole())
+            ->put(route('clients.update', $client), [
+                'name' => 'ASSOCIACAO BRASILEIRA LTDA',
+                'document' => '12.345.678/0001-95',
+                'associado_abac' => '1',
+            ])
+            ->assertSessionHasNoErrors();
+
+        $this->assertTrue((bool) $client->fresh()->associado_abac);
+    }
 
     public function test_update_altera_campo_e_grava_client_audit_log(): void
     {

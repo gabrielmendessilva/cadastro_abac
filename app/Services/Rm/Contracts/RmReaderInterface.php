@@ -20,14 +20,16 @@ interface RmReaderInterface
      */
     public function preflight(): void;
 
-    public function countFcfo(?int $coligada = null): int;
+    /** @param list<string> $documentos CNPJ/CPF que limitam a leitura; vazio = tudo */
+    public function countFcfo(?int $coligada = null, array $documentos = []): int;
 
     /**
      * Itera FCFO em chunks ordenados por (CODCOLIGADA, CODCFO).
      *
+     * @param list<string> $documentos CNPJ/CPF que limitam a leitura; vazio = tudo
      * @param callable(array<int,array<string,mixed>>):void $handle recebe as linhas do chunk
      */
-    public function eachFcfoChunk(int $chunkSize, ?int $coligada, ?int $limit, callable $handle): void;
+    public function eachFcfoChunk(int $chunkSize, ?int $coligada, ?int $limit, array $documentos, callable $handle): void;
 
     /**
      * @param  array<int,list<string>>  $codesByColigada  [coligada => [CODCFO, ...]]

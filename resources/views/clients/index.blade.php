@@ -33,20 +33,36 @@
                         <input type="checkbox" name="tipo[]" value="{{ $chave }}" @checked(in_array($chave, $tiposSelecionados, true)) class="h-4 w-4 shrink-0 rounded border-slate-300">
                         {{ $grupo['rotulo'] }}
                     </label>
+
+                    @if($chave === 'administradoras')
+                        {{-- Associadas/Não Associadas vêm logo depois de Administradoras
+                             porque na tela antiga eram a mesma pergunta: Administradoras
+                             (S) / (N). Filtram `associado_abac`, que é outro eixo — valem
+                             para qualquer tipo marcado, não só para administradoras.
+
+                             Cada caixa leva um hidden de par: checkbox desmarcada não é
+                             enviada, e sem o valor 0 o controller não saberia distinguir
+                             "desmarquei" de "abri a tela agora". O hidden vem antes de
+                             propósito — com as duas chaves na URL, vale a última.
+                             Marcar as duas (ou nenhuma) cobre a base inteira e o filtro
+                             sai de cena; a tela abre com Associadas marcada. --}}
+                        <label class="flex cursor-pointer items-center gap-2 rounded-full border border-slate-300 bg-white px-3 py-1.5 text-sm text-slate-700">
+                            <input type="hidden" name="associadas" value="0">
+                            <input type="checkbox" name="associadas" value="1" @checked($mostraAssociadas) class="h-4 w-4 shrink-0 rounded border-slate-300">
+                            Associadas
+                        </label>
+
+                        <label class="flex cursor-pointer items-center gap-2 rounded-full border border-slate-300 bg-white px-3 py-1.5 text-sm text-slate-700">
+                            <input type="hidden" name="nao_associadas" value="0">
+                            <input type="checkbox" name="nao_associadas" value="1" @checked($mostraNaoAssociadas) class="h-4 w-4 shrink-0 rounded border-slate-300">
+                            Não Associadas
+                        </label>
+
+                        {{-- Divisor: fecha o bloco das administradoras; o que vem depois
+                             são os demais tipos de cadastro. --}}
+                        <span class="hidden h-4 border-l border-slate-300 lg:block"></span>
+                    @endif
                 @endforeach
-
-                {{-- Divisor: associação é outro eixo, não um quarto tipo de cadastro. --}}
-                <span class="hidden h-4 border-l border-slate-300 lg:block"></span>
-
-                {{-- O hidden é o par obrigatório do checkbox: caixa desmarcada não é
-                     enviada, e sem o associado=0 o controller não teria como saber a
-                     diferença entre "desmarquei" e "abri a tela agora". O hidden vem
-                     antes de propósito — com as duas chaves na URL, vale a última. --}}
-                <label class="flex cursor-pointer items-center gap-2 rounded-full border border-slate-300 bg-white px-3 py-1.5 text-sm text-slate-700">
-                    <input type="hidden" name="associado" value="0">
-                    <input type="checkbox" name="associado" value="1" @checked($somenteAssociados) class="h-4 w-4 shrink-0 rounded border-slate-300">
-                    Somente associados
-                </label>
             </div>
 
             <span class="mt-2 block text-xs text-slate-500">Sem nenhum tipo marcado, a lista mostra todos os tipos de cadastro.</span>
@@ -153,13 +169,13 @@
                             @php
                                 $filtrosAtivos = array_filter([
                                     $filtroStatus === null ? null : ($filtroStatus === '1' ? 'Ativo' : 'Inativo'),
-                                    $somenteAssociados ? 'Somente associados' : null,
+                                    $vinculoExigido === null ? null : ($vinculoExigido ? 'Associadas' : 'Não Associadas'),
                                 ]);
                             @endphp
                             @if($filtrosAtivos !== [])
                                 <div class="mt-2 text-xs">
                                     A lista está filtrada em <span class="font-medium">{{ implode(' + ', $filtrosAtivos) }}</span>.
-                                    <a href="{{ route('clients.index', array_merge(request()->except('page'), ['status' => '', 'associado' => '0'])) }}" class="text-indigo-600 underline">Buscar em todos os clientes</a>
+                                    <a href="{{ route('clients.index', array_merge(request()->except('page'), ['status' => '', 'associadas' => '1', 'nao_associadas' => '1'])) }}" class="text-indigo-600 underline">Buscar em todos os clientes</a>
                                 </div>
                             @endif
                         </td>

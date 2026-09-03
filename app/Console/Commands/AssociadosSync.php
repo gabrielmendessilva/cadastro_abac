@@ -22,7 +22,8 @@ class AssociadosSync extends Command
         {--dry-run : Não grava nada; só relata o que seria feito}
         {--limit= : Processa no máximo N CNPJs}
         {--chunk= : CNPJs por chunk (default: config associados.sync.chunk)}
-        {--discover : Só lista as meta_keys dos usuários associados, com contagem — não grava nada}';
+        {--discover : Só lista as meta_keys dos usuários associados, com contagem — não grava nada}
+        {--somente-contatos : Só mexe em client_contatos; não cria nem atualiza cliente, e não toca em endereço}';
 
     protected $description = 'Sincroniza clientes e contatos do WordPress dos associados para o banco atual';
 
@@ -103,6 +104,7 @@ class AssociadosSync extends Command
             limit: $limit,
             chunkSize: $chunk,
             maxWarningSamples: $maxWarnings,
+            somenteContatos: (bool) $this->option('somente-contatos'),
             onChunk: fn (int $processed) => $bar->advance($processed),
         ));
 

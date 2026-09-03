@@ -3,6 +3,7 @@
 namespace Tests\Feature\Rm\Support;
 
 use App\Services\Rm\Contracts\RmReaderInterface;
+use App\Services\Rm\Support\Normalizer;
 
 /**
  * Implementação em memória do RmReaderInterface para os testes:
@@ -41,14 +42,14 @@ class FakeRmReader implements RmReaderInterface
         // no-op: o fake sempre "passa" no preflight
     }
 
-    public function countFcfo(?int $coligada = null): int
+    public function countFcfo(?int $coligada = null, array $documentos = []): int
     {
-        return count($this->filteredFcfo($coligada));
+        return count($this->filteredFcfo($coligada, $documentos));
     }
 
-    public function eachFcfoChunk(int $chunkSize, ?int $coligada, ?int $limit, callable $handle): void
+    public function eachFcfoChunk(int $chunkSize, ?int $coligada, ?int $limit, array $documentos, callable $handle): void
     {
-        $rows = $this->filteredFcfo($coligada);
+        $rows = $this->filteredFcfo($coligada, $documentos);
 
         if ($limit !== null) {
             $rows = array_slice($rows, 0, $limit);
@@ -110,15 +111,34 @@ class FakeRmReader implements RmReaderInterface
     /**
      * @return list<array<string,mixed>>
      */
-    private function filteredFcfo(?int $coligada): array
+    /** @param list<string> $documentos */
+    private function filteredFcfo(?int $coligada, array $documentos = []): array
     {
-        if ($coligada === null) {
-            return $this->fcfo;
+        $rows = $this->fcfo;
+
+        if ($coligada !== null) {
+            $rows = array_filter(
+                $rows,
+                static fn (array $row): bool => (int) $row['CODCOLIGADA'] === $coligada,
+            );
         }
 
-        return array_values(array_filter(
-            $this->fcfo,
-            static fn (array $row): bool => (int) $row['CODCOLIGADA'] === $coligada,
-        ));
+        if ($documentos !== []) {
+            $alvos = array_map(
+                static fn (string $doc): string => Normalizer::digits($doc),
+                $documentos,
+            );
+
+            $rows = array_filter(
+                $rows,
+                static fn (array $row): bool => in_array(
+                    Normalizer::digits((string) ($row['CGCCFO'] ?? '')),
+                    $alvos,
+                    true,
+                ),
+            );
+        }
+
+        return array_values($rows);
     }
 }

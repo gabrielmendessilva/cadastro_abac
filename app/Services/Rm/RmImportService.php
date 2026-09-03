@@ -170,6 +170,7 @@ class RmImportService
                 $options->chunkSize,
                 $options->coligada,
                 $options->limit,
+                $options->documentos,
                 function (array $rows) use ($options, $report, $complColumns): void {
                     $keys = [];
                     foreach ($rows as $row) {

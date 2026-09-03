@@ -4,6 +4,7 @@ namespace App\Services\Rm;
 
 use App\Services\Rm\Contracts\RmReaderInterface;
 use App\Services\Rm\Exceptions\RmImportException;
+use App\Services\Rm\Support\Normalizer;
 use Illuminate\Database\ConnectionInterface;
 use Illuminate\Database\Query\Builder;
 use Psr\Log\LoggerInterface;
@@ -98,16 +99,16 @@ class RmSqlServerReader implements RmReaderInterface
         $this->logger->info('rm.preflight.ok', ['tabelas' => array_keys($required)]);
     }
 
-    public function countFcfo(?int $coligada = null): int
+    public function countFcfo(?int $coligada = null, array $documentos = []): int
     {
-        return $this->fcfoQuery($coligada)->count();
+        return $this->fcfoQuery($coligada, $documentos)->count();
     }
 
-    public function eachFcfoChunk(int $chunkSize, ?int $coligada, ?int $limit, callable $handle): void
+    public function eachFcfoChunk(int $chunkSize, ?int $coligada, ?int $limit, array $documentos, callable $handle): void
     {
         $remaining = $limit;
 
-        $this->fcfoQuery($coligada)
+        $this->fcfoQuery($coligada, $documentos)
             ->select(self::FCFO_COLUMNS)
             ->orderBy('CODCOLIGADA')
             ->orderBy('CODCFO')
@@ -271,7 +272,8 @@ class RmSqlServerReader implements RmReaderInterface
         return $keyed;
     }
 
-    private function fcfoQuery(?int $coligada): Builder
+    /** @param list<string> $documentos */
+    private function fcfoQuery(?int $coligada, array $documentos = []): Builder
     {
         $query = $this->connection->table($this->qualify('FCFO'));
 
@@ -279,7 +281,39 @@ class RmSqlServerReader implements RmReaderInterface
             $query->where('CODCOLIGADA', $coligada);
         }
 
+        if ($documentos !== []) {
+            $query->whereIn('CGCCFO', $this->variantesDeDocumento($documentos));
+        }
+
         return $query;
+    }
+
+    /**
+     * CGCCFO é texto livre: a mesma empresa aparece mascarada num RM e só com
+     * dígitos em outro. Filtrar pelas duas formas evita depender de como aquela
+     * instalação digitou. Um REPLACE() na coluna resolveria também, mas jogaria
+     * fora o índice — e a FCFO é grande.
+     *
+     * @param  list<string>  $documentos
+     * @return list<string>
+     */
+    private function variantesDeDocumento(array $documentos): array
+    {
+        $variantes = [];
+
+        foreach ($documentos as $documento) {
+            $digits = Normalizer::digits($documento);
+
+            if ($digits === '') {
+                continue;
+            }
+
+            $variantes[$digits] = $digits;
+            $mascarado = Normalizer::formatCpfCnpj($digits);
+            $variantes[$mascarado] = $mascarado;
+        }
+
+        return array_values($variantes);
     }
 
     /**

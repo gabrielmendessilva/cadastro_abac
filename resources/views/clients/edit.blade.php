@@ -27,6 +27,12 @@
             </div>
         @endif
 
+        {{-- Todo checkbox aqui vem precedido de um <input type="hidden" name="X" value="0">.
+             Checkbox desmarcada não é enviada pelo navegador, e o UpdateClientRequest só
+             normaliza o booleano quando a chave chega ($this->has($key) em
+             prepareForValidation). Sem o hidden, desmarcar não vira false: a chave some,
+             fica fora do validated(), o update() não toca a coluna — e a tela ainda assim
+             diz "atualizado com sucesso". Era impossível desmarcar qualquer um deles. --}}
         <form method="POST" action="{{ route('clients.update', $client) }}" class="space-y-6">
             @csrf
             @method('PUT')
@@ -58,6 +64,7 @@
                         <input type="text" name="nome_comercial" value="{{ old('nome_comercial', $client->nome_comercial) }}" class="w-full rounded-xl border border-slate-300 px-4 py-2.5 text-sm">
                     </div>
                     <label class="flex items-center gap-2 text-sm">
+                        <input type="hidden" name="possui_outro_nome" value="0">
                         <input type="checkbox" name="possui_outro_nome" value="1" @checked(old('possui_outro_nome', $client->possui_outro_nome)) class="rounded">
                         Possui outro nome?
                     </label>
@@ -120,6 +127,7 @@
                 <h2 class="mb-4 text-lg font-semibold text-slate-900">Filiação ABAC</h2>
                 <div class="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
                     <label class="flex items-center gap-2 text-sm">
+                        <input type="hidden" name="associado_abac" value="0">
                         <input type="checkbox" name="associado_abac" value="1" @checked(old('associado_abac', $client->associado_abac)) class="rounded">
                         Associado ABAC
                     </label>
@@ -163,6 +171,7 @@
                 <h2 class="mb-4 text-lg font-semibold text-slate-900">Filiação SINAC</h2>
                 <div class="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
                     <label class="flex items-center gap-2 text-sm">
+                        <input type="hidden" name="associado_sinac" value="0">
                         <input type="checkbox" name="associado_sinac" value="1" @checked(old('associado_sinac', $client->associado_sinac)) class="rounded">
                         Associado SINAC
                     </label>
@@ -267,6 +276,7 @@
                         <textarea name="emails_boletos" rows="3" class="w-full rounded-xl border border-slate-300 px-4 py-2.5 text-sm">{{ old('emails_boletos', $client->emails_boletos) }}</textarea>
                     </div>
                     <label class="flex items-center gap-2 text-sm">
+                        <input type="hidden" name="possui_contrato_ativo" value="0">
                         <input type="checkbox" name="possui_contrato_ativo" value="1" @checked(old('possui_contrato_ativo', $client->possui_contrato_ativo)) class="rounded">
                         Possui contrato ativo?
                     </label>
@@ -305,6 +315,7 @@
                         <input type="text" name="presidente_atual" value="{{ old('presidente_atual', $client->presidente_atual) }}" class="w-full rounded-xl border border-slate-300 px-4 py-2.5 text-sm">
                     </div>
                     <label class="flex items-center gap-2 text-sm">
+                        <input type="hidden" name="mandato_alerta" value="0">
                         <input type="checkbox" name="mandato_alerta" value="1" @checked(old('mandato_alerta', $client->mandato_alerta)) class="rounded">
                         Avisar quando mandato vencer
                     </label>
@@ -356,6 +367,7 @@
                 <h2 class="mb-4 text-lg font-semibold text-slate-900">Status e observações livres</h2>
                 <div class="grid grid-cols-1 gap-4 md:grid-cols-2">
                     <label class="flex items-center gap-2 text-sm md:col-span-2">
+                        <input type="hidden" name="status" value="0">
                         <input type="checkbox" name="status" value="1" @checked(old('status', $client->status)) class="rounded">
                         Cliente ativo no sistema
                     </label>

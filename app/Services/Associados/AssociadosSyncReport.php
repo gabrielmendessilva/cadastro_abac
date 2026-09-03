@@ -31,6 +31,9 @@ final class AssociadosSyncReport
 
     public int $enderecosSemMudanca = 0;
 
+    /** CNPJs pulados por não existirem no destino (só no modo --somente-contatos). */
+    public int $cnpjsSemClientePulados = 0;
+
     public int $usuariosSemEmail = 0;
 
     public int $usuariosOrfaos = 0;
@@ -111,6 +114,7 @@ final class AssociadosSyncReport
             ['Endereços criados', $this->enderecosCriados],
             ['Endereços atualizados', $this->enderecosAtualizados],
             ['Endereços sem mudança', $this->enderecosSemMudanca],
+            ['CNPJs sem cliente no destino (pulados em somente-contatos)', $this->cnpjsSemClientePulados],
             ['Usuários WP sem e-mail (pulados)', $this->usuariosSemEmail],
             ['Usuários WP órfãos (usermeta sem wp_users)', $this->usuariosOrfaos],
             ['Conflitos de meta entre usuários do mesmo CNPJ', $this->conflitosDeMeta],

@@ -68,6 +68,7 @@ class AssociadosSyncServiceTest extends TestCase
                 $t->string('funcao')->nullable();
                 $t->string('email')->nullable();
                 $t->string('telefone')->nullable();
+                $t->string('telefone_2')->nullable();
                 $t->boolean('unlock_whatsApp')->default(false);
                 $t->timestamps();
             });
@@ -313,6 +314,94 @@ class AssociadosSyncServiceTest extends TestCase
         $this->service()->run(new AssociadosSyncOptions);
 
         $this->assertSame('Diretor Comercial', DB::table('client_contatos')->value('funcao'));
+    }
+
+    /** Telefone e telefone secundário do representante entram no contato. */
+    public function test_telefones_do_representante_vao_para_o_contato(): void
+    {
+        DB::connection('pgsql-associado')->table('wp_users')->insert([
+            ['ID' => 1, 'user_login' => 'gi', 'user_email' => 'gi@x.com', 'display_name' => 'Gi'],
+        ]);
+        DB::connection('pgsql-associado')->table('wp_usermeta')->insert([
+            ['umeta_id' => 1, 'user_id' => 1, 'meta_key' => 'cnpj_associada', 'meta_value' => '12.345.678/0001-95'],
+            ['umeta_id' => 2, 'user_id' => 1, 'meta_key' => '_representante_nome_completo', 'meta_value' => 'Gilberto Alves'],
+            ['umeta_id' => 3, 'user_id' => 1, 'meta_key' => '_representante_telefone', 'meta_value' => '(11) 3333-4444'],
+            ['umeta_id' => 4, 'user_id' => 1, 'meta_key' => '_representante_telefone_secundario', 'meta_value' => '(11) 98888-7777'],
+        ]);
+
+        $this->service()->run(new AssociadosSyncOptions);
+
+        $contato = DB::table('client_contatos')->first();
+        $this->assertSame('(11) 3333-4444', $contato->telefone);
+        $this->assertSame('(11) 98888-7777', $contato->telefone_2);
+    }
+
+    /** Telefone vazio no WP não apaga o que foi digitado à mão no CRUD. */
+    public function test_telefone_vazio_no_wp_nao_apaga_o_digitado_a_mao(): void
+    {
+        $clientId = DB::table('clients')->insertGetId([
+            'name' => 'EMPRESA A', 'document' => '12.345.678/0001-95', 'associado_abac' => true,
+            'created_at' => now(), 'updated_at' => now(),
+        ]);
+        DB::table('client_contatos')->insert([
+            'client_id' => $clientId, 'user_id' => 7, 'nome' => 'Gilberto Alves',
+            'email' => 'gi@x.com', 'telefone' => 'DIGITADO NO CRUD',
+            'created_at' => now(), 'updated_at' => now(),
+        ]);
+
+        DB::connection('pgsql-associado')->table('wp_users')->insert([
+            ['ID' => 1, 'user_login' => 'gi', 'user_email' => 'gi@x.com', 'display_name' => 'Gi'],
+        ]);
+        DB::connection('pgsql-associado')->table('wp_usermeta')->insert([
+            ['umeta_id' => 1, 'user_id' => 1, 'meta_key' => 'cnpj_associada', 'meta_value' => '12.345.678/0001-95'],
+            ['umeta_id' => 2, 'user_id' => 1, 'meta_key' => '_representante_nome_completo', 'meta_value' => 'Gilberto Alves'],
+            ['umeta_id' => 3, 'user_id' => 1, 'meta_key' => '_representante_telefone', 'meta_value' => ''],
+        ]);
+
+        $report = $this->service()->run(new AssociadosSyncOptions);
+
+        $contato = DB::table('client_contatos')->first();
+        $this->assertSame('DIGITADO NO CRUD', $contato->telefone);
+        $this->assertSame(1, $report->contatosSemMudanca);
+        $this->assertSame(0, $report->contatosAtualizados);
+    }
+
+    /**
+     * --somente-contatos mexe só em client_contatos.
+     *
+     * Cliente e endereço existentes ficam intocados, e CNPJ que ainda não existe
+     * no destino é pulado em vez de criado.
+     */
+    public function test_somente_contatos_nao_toca_em_cliente_nem_endereco(): void
+    {
+        $clientId = DB::table('clients')->insertGetId([
+            'name' => 'NOME MANUAL', 'document' => '12.345.678/0001-95',
+            'phone' => '(21) 90000-0000', 'associado_abac' => true,
+            'created_at' => now(), 'updated_at' => now(),
+        ]);
+
+        $this->seedSource(); // traz razao_social, telefone_empresa e endereço do CNPJ A
+
+        $report = $this->service()->run(new AssociadosSyncOptions(somenteContatos: true));
+
+        // O cliente ficou como estava, apesar de o WP ter razão social e telefone.
+        $client = DB::table('clients')->where('id', $clientId)->first();
+        $this->assertSame('NOME MANUAL', $client->name);
+        $this->assertSame('(21) 90000-0000', $client->phone);
+        $this->assertSame(0, $report->clientsCriados);
+        $this->assertSame(0, $report->clientsAtualizados);
+
+        // Nenhum endereço, apesar das metas _associada_* estarem na origem.
+        $this->assertSame(0, DB::table('client_enderecos')->count());
+        $this->assertSame(0, $report->enderecosCriados);
+
+        // Os contatos do CNPJ que existe entraram.
+        $this->assertSame(2, $report->contatosCriados);
+        $this->assertSame(2, DB::table('client_contatos')->where('client_id', $clientId)->count());
+
+        // O CNPJ B não existe no destino: pulado, não criado.
+        $this->assertSame(1, $report->cnpjsSemClientePulados);
+        $this->assertSame(1, DB::table('clients')->count());
     }
 
     public function test_nome_do_contato_ignora_representante_em_branco(): void

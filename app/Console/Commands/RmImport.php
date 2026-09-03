@@ -21,6 +21,7 @@ class RmImport extends Command
         {--dry-run : Não grava nada; só relata o que seria feito}
         {--limit= : Processa no máximo N registros FCFO}
         {--coligada= : Restringe a uma coligada do RM}
+        {--cnpj=* : Restringe a importação aos CNPJ/CPF informados (com ou sem máscara)}
         {--chunk= : Tamanho do chunk de leitura (default: config rm.import.chunk)}
         {--no-backfill : Não completar clients já existentes (centro de custo, site e campos opcionais do RM)}
         {--no-desativar : Não desativar quem está no RM com STATUS/OCORRENCIA diferente de OK}';
@@ -32,6 +33,7 @@ class RmImport extends Command
         $dryRun = (bool) $this->option('dry-run');
         $limit = $this->option('limit') !== null ? max(0, (int) $this->option('limit')) : null;
         $coligada = $this->option('coligada') !== null ? (int) $this->option('coligada') : null;
+        $documentos = array_values(array_filter((array) $this->option('cnpj')));
         $chunk = $this->option('chunk') !== null
             ? max(1, (int) $this->option('chunk'))
             : max(1, (int) config('rm.import.chunk', 300));
@@ -41,13 +43,20 @@ class RmImport extends Command
         }
 
         try {
-            $total = $reader->countFcfo($coligada);
+            $total = $reader->countFcfo($coligada, $documentos);
+
+            if ($documentos !== [] && $total === 0) {
+                $this->error('Nenhum dos documentos informados existe na FCFO do RM: '.implode(', ', $documentos));
+
+                return self::FAILURE;
+            }
             $planned = $limit !== null ? min($limit, $total) : $total;
 
             $this->info(sprintf(
-                'FCFO: %d registro(s) no RM%s — processando %d.',
+                'FCFO: %d registro(s) no RM%s%s — processando %d.',
                 $total,
                 $coligada !== null ? " (coligada {$coligada})" : '',
+                $documentos !== [] ? ' (restrito a '.count($documentos).' documento(s))' : '',
                 $planned,
             ));
 
@@ -59,6 +68,7 @@ class RmImport extends Command
                 limit: $limit,
                 coligada: $coligada,
                 chunkSize: $chunk,
+                documentos: $documentos,
                 backfill: ! $this->option('no-backfill') && (bool) config('rm.import.backfill', true),
                 desativarForaDeOrdem: ! $this->option('no-desativar')
                     && (bool) config('rm.import.desativar_fora_de_ordem', true),

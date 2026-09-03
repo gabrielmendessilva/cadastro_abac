@@ -15,7 +15,10 @@ class ClientController extends Controller
         abort_unless(auth()->user()->can('clients.view'), 403);
 
         $filtroStatus = $this->filtroComPadrao($request, 'status', '1');
-        $somenteAssociados = $this->somenteAssociados($request);
+        $mostraAssociadas = $this->caixaMarcada($request, 'associadas', true);
+        $mostraNaoAssociadas = $this->caixaMarcada($request, 'nao_associadas', false);
+        // As duas marcadas — ou as duas vazias — cobrem a base inteira: não restringe.
+        $vinculoExigido = $mostraAssociadas === $mostraNaoAssociadas ? null : $mostraAssociadas;
         $tiposSelecionados = $this->tiposSelecionados($request);
         $categoriasDoFiltro = $this->categoriasDoFiltro($tiposSelecionados);
 
@@ -48,7 +51,7 @@ class ClientController extends Controller
             ->when($filtroStatus !== null, function ($query) use ($filtroStatus) {
                 $query->where('status', $filtroStatus === '1');
             })
-            ->when($somenteAssociados, fn ($query) => $query->where('associado_abac', true))
+            ->when($vinculoExigido !== null, fn ($query) => $query->where('associado_abac', $vinculoExigido))
             // Tipo de cadastro: os botões da tela antiga do Access virados em
             // checkbox. null = sem restrição (nada marcado, ou "Outras Empresas").
             ->when($categoriasDoFiltro !== null, fn ($query) => $query->whereIn('categoria', $categoriasDoFiltro))
@@ -58,7 +61,14 @@ class ClientController extends Controller
             ->paginate(10)
             ->withQueryString();
 
-        return view('clients.index', compact('clients', 'filtroStatus', 'somenteAssociados', 'tiposSelecionados'));
+        return view('clients.index', compact(
+            'clients',
+            'filtroStatus',
+            'mostraAssociadas',
+            'mostraNaoAssociadas',
+            'vinculoExigido',
+            'tiposSelecionados',
+        ));
     }
 
     /**
@@ -78,19 +88,16 @@ class ClientController extends Controller
     }
 
     /**
-     * Se a lista deve mostrar só quem é associado à ABAC.
+     * Estado de uma caixa de filtro que tem input hidden de par na tela.
      *
-     * Marcado é o estado de abertura da tela: sem a chave na URL (login, menu,
-     * link solto) o filtro entra. Desmarcado, o formulário manda `associado=0`
-     * pelo input hidden que acompanha a caixa — é só assim que dá para separar
-     * "desmarquei" de "nem submeti", já que checkbox desmarcado não é enviado.
-     *
-     * Desmarcado não inverte o filtro: solta a lista inteira, associados e não
-     * associados juntos.
+     * Checkbox desmarcada não é enviada pelo navegador, então sem o hidden o
+     * controller receberia a mesma requisição em dois casos opostos: "desmarquei"
+     * e "acabei de abrir a tela". Com o hidden, chave ausente é só a abertura —
+     * e aí entra o padrão.
      */
-    private function somenteAssociados(Request $request): bool
+    private function caixaMarcada(Request $request, string $campo, bool $padrao): bool
     {
-        return ! $request->has('associado') || $request->query('associado') === '1';
+        return $request->has($campo) ? $request->query($campo) === '1' : $padrao;
     }
 
     /**
