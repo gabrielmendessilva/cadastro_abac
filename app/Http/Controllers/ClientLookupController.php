@@ -34,10 +34,16 @@ class ClientLookupController extends Controller
         // `clients.document` guarda o documento formatado (51.855.716/0001-01),
         // então comparar só os dígitos nunca casaria. Busca pela máscara e cai
         // para o valor cru caso algum registro tenha entrado sem formatação.
+        //
+        // leftJoin, não join: `regional_id` é nulo em 2.899 dos 3.019 clients, e
+        // o INNER JOIN sumia com todos eles — o lookup só enxergava os 120 que
+        // têm regional. Quem não tem volta com `regional` = null.
         $client = Client::query()
-            ->join('regionais', 'clients.regional_id','regionais.id' )
-            ->where('document', Normalizer::formatCpfCnpj($doc))
-            ->orWhere('document', $doc)
+            ->leftJoin('regionais', 'clients.regional_id', '=', 'regionais.id')
+            ->where(function ($query) use ($doc) {
+                $query->where('clients.document', Normalizer::formatCpfCnpj($doc))
+                    ->orWhere('clients.document', $doc);
+            })
             ->select('clients.*', 'regionais.nome as regional')
             ->first();
 
