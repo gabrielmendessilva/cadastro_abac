@@ -78,6 +78,11 @@ return [
         '_representante_telefone',
         '_representante_telefone_secundario',
         '_representante_funcao',
+        // Reservas de função/telefone quando as `_representante_*` estão vazias
+        // (ver METAS_FUNCAO e METAS_TELEFONE no service).
+        '_profissionais_funcao_cargo',
+        '_profissionais_telefone',
+        '_profissionais_celular',
         // Lixo interno do WP visto no censo da primeira execução real.
         'wp_elementor_enable_ai',
         'community-events-location',
@@ -85,6 +90,43 @@ return [
         'meta-box-order_dashboard',
         'metaboxhidden_dashboard',
         '_gform-update-entry-id',
+        // Consumidas pela ponte do Gravity Forms (ver 'gravity_forms' abaixo).
+        'entry_id',
+        '_gform-entry-id',
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | Vínculo alternativo usuário => associada (Gravity Forms)
+    |--------------------------------------------------------------------------
+    | O formulário antigo do portal gravava o CNPJ da associada direto numa
+    | usermeta (`_profissionais_associada`), e é isso que o sync procura. O
+    | formulário novo parou de gravar essa meta — o último usuário a recebê-la
+    | é de 08/01/2026. Desde então o vínculo existe só na entrada do Gravity
+    | Forms, e no formato de ID do usuário WP da associada, não de CNPJ.
+    |
+    | Sem esta ponte, todo profissional cadastrado depois daquela data fica
+    | invisível para o sync (402 usuários na conferência de 03/09/2026, dos
+    | quais 292 recuperáveis por aqui).
+    |
+    | O caminho é: wp_usermeta[entry_meta_key] => wp_gf_entry_meta[assoc_field]
+    | => ID do usuário da associada => a meta de CNPJ desse usuário.
+    |
+    | Só vale para usuário SEM nenhum vínculo por meta: quem já tem CNPJ em
+    | usermeta continua resolvido pelo caminho antigo, sem risco de o
+    | formulário arrastá-lo para outra empresa.
+    */
+    'gravity_forms' => [
+        'enabled' => (bool) env('ASSOCIADOS_SYNC_GRAVITY_FORMS', true),
+
+        // Tabela de metas das entradas do Gravity Forms na origem.
+        'entry_meta_table' => 'wp_gf_entry_meta',
+
+        // Usermeta que guarda, no usuário, o id da entrada que o cadastrou.
+        'entry_meta_key' => 'entry_id',
+
+        // Campo da entrada que guarda o ID do usuário WP da associada.
+        'assoc_field' => '19',
     ],
 
 ];

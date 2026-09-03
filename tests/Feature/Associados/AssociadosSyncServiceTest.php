@@ -42,6 +42,12 @@ class AssociadosSyncServiceTest extends TestCase
             ],
             'associados.meta_ignore' => ['nickname'],
             'associados.sync.contact_user_id' => 1,
+            'associados.gravity_forms' => [
+                'enabled' => true,
+                'entry_meta_table' => 'wp_gf_entry_meta',
+                'entry_meta_key' => 'entry_id',
+                'assoc_field' => '19',
+            ],
         ]);
 
         // Destino (conexão default) — colunas relevantes do schema vivo.
@@ -107,6 +113,13 @@ class AssociadosSyncServiceTest extends TestCase
             $t->string('meta_key')->nullable();
             $t->text('meta_value')->nullable();
         });
+
+        Schema::connection('pgsql-associado')->create('wp_gf_entry_meta', function ($t) {
+            $t->increments('id');
+            $t->unsignedInteger('entry_id');
+            $t->string('meta_key')->nullable();
+            $t->text('meta_value')->nullable();
+        });
     }
 
     private function service(): AssociadosSyncService
@@ -156,6 +169,162 @@ class AssociadosSyncServiceTest extends TestCase
             ['umeta_id' => 17, 'user_id' => 2, 'meta_key' => 'last_name', 'meta_value' => 'Souza'],
             ['umeta_id' => 18, 'user_id' => 2, 'meta_key' => 'nickname', 'meta_value' => 'Jô'],
         ]);
+    }
+
+    /**
+     * Usuário cadastrado pelo formulário novo do portal: não tem meta de CNPJ
+     * nenhuma, e o vínculo com a associada existe só na entrada do Gravity
+     * Forms, no formato de ID do usuário da associada.
+     */
+    private function seedEntradaFormulario(int $userId, string $email, string $nome, int $entryId, int $assocUserId): void
+    {
+        DB::connection('pgsql-associado')->table('wp_users')->insert([
+            ['ID' => $userId, 'user_login' => $email, 'user_email' => $email, 'display_name' => $nome],
+        ]);
+
+        DB::connection('pgsql-associado')->table('wp_usermeta')->insert([
+            ['user_id' => $userId, 'meta_key' => 'first_name', 'meta_value' => $nome],
+            ['user_id' => $userId, 'meta_key' => 'entry_id', 'meta_value' => (string) $entryId],
+        ]);
+
+        DB::connection('pgsql-associado')->table('wp_gf_entry_meta')->insert([
+            ['entry_id' => $entryId, 'meta_key' => '19', 'meta_value' => (string) $assocUserId],
+        ]);
+    }
+
+    public function test_vincula_usuario_sem_meta_de_cnpj_pela_entrada_do_gravity_forms(): void
+    {
+        $this->seedSource();
+
+        // user 4 sem cnpj_associada: só a entrada 77 apontando para o user 1,
+        // que é quem carrega o CNPJ A.
+        $this->seedEntradaFormulario(userId: 4, email: 'danilo@x.com', nome: 'Danilo', entryId: 77, assocUserId: 1);
+
+        $report = $this->service()->run(new AssociadosSyncOptions);
+
+        $this->assertSame(1, $report->vinculosViaFormulario);
+        $this->assertSame(3, $report->contatosCriados);
+
+        $clientA = DB::table('clients')->where('document', '12.345.678/0001-95')->first();
+        $contato = DB::table('client_contatos')
+            ->where('client_id', $clientA->id)
+            ->where('email', 'danilo@x.com')
+            ->first();
+
+        $this->assertNotNull($contato);
+        $this->assertSame('Danilo', $contato->nome);
+    }
+
+    public function test_ponte_do_gravity_forms_nao_move_quem_ja_tem_vinculo_por_meta(): void
+    {
+        $this->seedSource();
+
+        // user 2 já está no CNPJ A pela usermeta. A entrada 88 o aponta para o
+        // user 3 (CNPJ B) — a meta tem que vencer, senão ele viraria contato das
+        // duas empresas.
+        DB::connection('pgsql-associado')->table('wp_usermeta')->insert([
+            ['user_id' => 2, 'meta_key' => 'entry_id', 'meta_value' => '88'],
+        ]);
+        DB::connection('pgsql-associado')->table('wp_gf_entry_meta')->insert([
+            ['entry_id' => 88, 'meta_key' => '19', 'meta_value' => '3'],
+        ]);
+
+        $report = $this->service()->run(new AssociadosSyncOptions);
+
+        $this->assertSame(0, $report->vinculosViaFormulario);
+        $this->assertSame(2, $report->contatosCriados);
+
+        $clientB = DB::table('clients')->where('document', '04.124.922/0001-61')->first();
+        $this->assertSame(0, DB::table('client_contatos')->where('client_id', $clientB->id)->count());
+    }
+
+    public function test_ponte_do_gravity_forms_desligada_deixa_o_usuario_de_fora(): void
+    {
+        config(['associados.gravity_forms.enabled' => false]);
+
+        $this->seedSource();
+        $this->seedEntradaFormulario(userId: 4, email: 'danilo@x.com', nome: 'Danilo', entryId: 77, assocUserId: 1);
+
+        $report = $this->service()->run(new AssociadosSyncOptions);
+
+        $this->assertSame(0, $report->vinculosViaFormulario);
+        $this->assertSame(2, $report->contatosCriados);
+        $this->assertSame(0, DB::table('client_contatos')->where('email', 'danilo@x.com')->count());
+    }
+
+    public function test_funcao_e_telefone_caem_nas_metas_de_profissionais_quando_nao_ha_representante(): void
+    {
+        $this->seedSource();
+        $this->seedEntradaFormulario(userId: 4, email: 'danilo@x.com', nome: 'Danilo', entryId: 77, assocUserId: 1);
+
+        DB::connection('pgsql-associado')->table('wp_usermeta')->insert([
+            ['user_id' => 4, 'meta_key' => '_profissionais_funcao_cargo', 'meta_value' => 'CTO'],
+            ['user_id' => 4, 'meta_key' => '_profissionais_telefone', 'meta_value' => '(11) 3363-0272'],
+            ['user_id' => 4, 'meta_key' => '_profissionais_celular', 'meta_value' => '(11) 93363-0272'],
+        ]);
+
+        $this->service()->run(new AssociadosSyncOptions);
+
+        $contato = DB::table('client_contatos')->where('email', 'danilo@x.com')->first();
+
+        $this->assertSame('CTO', $contato->funcao);
+        $this->assertSame('(11) 3363-0272', $contato->telefone);
+        $this->assertSame('(11) 93363-0272', $contato->telefone_2);
+    }
+
+    public function test_metas_de_representante_vencem_as_de_profissionais(): void
+    {
+        $this->seedSource();
+        $this->seedEntradaFormulario(userId: 4, email: 'danilo@x.com', nome: 'Danilo', entryId: 77, assocUserId: 1);
+
+        DB::connection('pgsql-associado')->table('wp_usermeta')->insert([
+            ['user_id' => 4, 'meta_key' => '_representante_funcao', 'meta_value' => 'DIRETOR'],
+            ['user_id' => 4, 'meta_key' => '_profissionais_funcao_cargo', 'meta_value' => 'CTO'],
+            ['user_id' => 4, 'meta_key' => '_representante_telefone', 'meta_value' => '(11) 2222-2222'],
+            ['user_id' => 4, 'meta_key' => '_profissionais_telefone', 'meta_value' => '(11) 3363-0272'],
+        ]);
+
+        $this->service()->run(new AssociadosSyncOptions);
+
+        $contato = DB::table('client_contatos')->where('email', 'danilo@x.com')->first();
+
+        $this->assertSame('DIRETOR', $contato->funcao);
+        $this->assertSame('(11) 2222-2222', $contato->telefone);
+    }
+
+    /**
+     * O campo de telefone do WP é texto livre e recebeu de tudo ('0 -', '(',
+     * 'DIRETOR'). Lixo não entra na coluna nem apaga o que já está lá.
+     */
+    public function test_valor_sem_cara_de_telefone_e_ignorado_e_nao_apaga_o_existente(): void
+    {
+        $this->seedSource();
+        $this->seedEntradaFormulario(userId: 4, email: 'danilo@x.com', nome: 'Danilo', entryId: 77, assocUserId: 1);
+
+        DB::connection('pgsql-associado')->table('wp_usermeta')->insert([
+            // 'DIRETOR' não é telefone: a cadeia segue para a meta seguinte.
+            ['user_id' => 4, 'meta_key' => '_representante_telefone', 'meta_value' => 'DIRETOR'],
+            ['user_id' => 4, 'meta_key' => '_profissionais_telefone', 'meta_value' => '(11) 3363-0272'],
+            // nenhuma das duas do telefone_2 presta: a coluna fica intacta.
+            ['user_id' => 4, 'meta_key' => '_representante_telefone_secundario', 'meta_value' => '('],
+            ['user_id' => 4, 'meta_key' => '_profissionais_celular', 'meta_value' => '0 -'],
+        ]);
+
+        $this->service()->run(new AssociadosSyncOptions);
+
+        $clientA = DB::table('clients')->where('document', '12.345.678/0001-95')->first();
+        DB::table('client_contatos')->where('email', 'danilo@x.com')->update(['telefone_2' => '(11) 90000-0000']);
+
+        // Segunda passada: o lixo do WP não pode anular o número digitado à mão.
+        $this->service()->run(new AssociadosSyncOptions);
+
+        $contato = DB::table('client_contatos')
+            ->where('client_id', $clientA->id)
+            ->where('email', 'danilo@x.com')
+            ->first();
+
+        $this->assertSame('(11) 3363-0272', $contato->telefone);
+        $this->assertSame('(11) 90000-0000', $contato->telefone_2);
     }
 
     public function test_cria_cliente_novo_com_metas_mapeadas_contatos_e_endereco(): void

@@ -23,6 +23,11 @@ use Illuminate\Support\Facades\Route;
 Route::get('/users/find', [ClientLookupController::class, 'findByDocument'])
     ->name('api.users.find');
 
+// Atualiza o `cod_omie` do Client a partir do CPF/CNPJ.
+// Aceita POST e PUT porque o consumidor (integração Omie) envia POST.
+Route::match(['post', 'put'], '/updateClient', [ClientLookupController::class, 'updateByDocument'])
+    ->name('api.users.update');
+
 // Integração Omie (financeiro).
 Route::prefix('omie')->name('api.omie.')->group(function () {
     // Contas a Receber — implementação real

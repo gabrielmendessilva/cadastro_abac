@@ -34,6 +34,9 @@ final class AssociadosSyncReport
     /** CNPJs pulados por não existirem no destino (só no modo --somente-contatos). */
     public int $cnpjsSemClientePulados = 0;
 
+    /** Usuários vinculados à associada pela entrada do Gravity Forms (sem meta de CNPJ). */
+    public int $vinculosViaFormulario = 0;
+
     public int $usuariosSemEmail = 0;
 
     public int $usuariosOrfaos = 0;
@@ -115,6 +118,7 @@ final class AssociadosSyncReport
             ['Endereços atualizados', $this->enderecosAtualizados],
             ['Endereços sem mudança', $this->enderecosSemMudanca],
             ['CNPJs sem cliente no destino (pulados em somente-contatos)', $this->cnpjsSemClientePulados],
+            ['Vínculos recuperados pelo Gravity Forms', $this->vinculosViaFormulario],
             ['Usuários WP sem e-mail (pulados)', $this->usuariosSemEmail],
             ['Usuários WP órfãos (usermeta sem wp_users)', $this->usuariosOrfaos],
             ['Conflitos de meta entre usuários do mesmo CNPJ', $this->conflitosDeMeta],
@@ -143,6 +147,7 @@ final class AssociadosSyncReport
             'enderecos_criados' => $this->enderecosCriados,
             'enderecos_atualizados' => $this->enderecosAtualizados,
             'enderecos_sem_mudanca' => $this->enderecosSemMudanca,
+            'vinculos_via_formulario' => $this->vinculosViaFormulario,
             'usuarios_sem_email' => $this->usuariosSemEmail,
             'usuarios_orfaos' => $this->usuariosOrfaos,
             'conflitos_de_meta' => $this->conflitosDeMeta,

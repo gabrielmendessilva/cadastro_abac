@@ -22,6 +22,12 @@ use Throwable;
  * (qualquer linha de usermeta cujo meta_value seja o CNPJ — semântica do script
  * legado) vira um contato do cliente.
  *
+ * Existe um segundo caminho de vínculo: o formulário novo do portal parou de
+ * gravar a meta de CNPJ no profissional (último a recebê-la é de 08/01/2026) e
+ * passou a guardar só o ID do usuário da associada na entrada do Gravity Forms.
+ * Quem não tem meta nenhuma é recuperado por aí — ver mapUsersViaGravityForms()
+ * e config('associados.gravity_forms').
+ *
  * Regras:
  * - Chave do cliente é sempre o CNPJ, comparado por dígitos normalizados
  *   (clients.document é armazenado FORMATADO e UNIQUE). Variantes formatada e
@@ -36,7 +42,8 @@ use Throwable;
  *   (config('associados.sync.contact_user_id')). Nome = _representante_nome_completo
  *   quando houver; senão first_name + last_name, senão nickname; usuário sem
  *   nenhuma das metas cai no display_name.
- *   Função = a primeira das METAS_FUNCAO com valor; telefones = METAS_TELEFONE.
+ *   Função e telefones = a primeira meta com valor de cada cadeia (METAS_FUNCAO
+ *   e METAS_TELEFONE), com as metas `_profissionais_*` de reserva.
  *   Desvio deliberado do legado: valor
  *   vazio no WP nunca anula campo do contato (telefone, obs, a própria função)
  *   — o legado sobrescrevia com null o que fora preenchido à mão no CRUD.
@@ -52,6 +59,14 @@ class AssociadosSyncService
 {
     /** Tamanho dos lotes de whereIn contra o banco remoto. */
     private const WHEREIN_BATCH = 500;
+
+    /**
+     * Mínimo de dígitos para um valor do WP ser aceito como telefone.
+     *
+     * Fixo escreve sem DDD com 8; abaixo disso não é telefone, é o campo de texto
+     * livre do formulário recebendo qualquer coisa — ver primeiroTelefoneComValor().
+     */
+    private const MIN_DIGITOS_TELEFONE = 8;
 
     /**
      * Metas do WP que carregam o nome da pessoa, na ordem em que são tentadas.
@@ -78,30 +93,42 @@ class AssociadosSyncService
      * `_representante_funcao` a que ele grava hoje (1.358). Ficam as duas, porque
      * nenhuma delas repete a chave com valor divergente no mesmo usuário.
      *
-     * `_profissionais_funcao_cargo` tem mais linhas (1.770) e continua de fora:
-     * está duplicada com valores diferentes em 1.104 delas, convivendo cargo e
-     * departamento no mesmo usuário — o critério de menor umeta_id traria o
-     * departamento como se fosse a função.
+     * `_profissionais_funcao_cargo` fecha a cadeia, como última reserva. Ela é
+     * mesmo duplicada com valores divergentes em ~1.100 usuários (cargo e
+     * departamento na mesma chave), o que antes a deixava de fora inteira — mas
+     * a conferência de 03/09/2026 mostrou que TODOS esses duplicados têm
+     * `_representante_funcao*` preenchida e por isso nunca chegam até aqui. Dos
+     * 303 usuários que de fato caem nesta reserva, nenhum tem a chave repetida.
+     * Sem ela, os cadastrados pelo formulário novo entrariam sem função nenhuma.
      */
     private const METAS_FUNCAO = [
         '_representante_funcao_cargo',
         '_representante_funcao',
+        '_profissionais_funcao_cargo',
     ];
 
     /**
-     * De-para coluna de client_contatos => meta do WP com o telefone da pessoa.
+     * De-para coluna de client_contatos => metas do WP com o telefone da pessoa,
+     * cada coluna com sua cadeia de reserva (vence a primeira preenchida).
      *
-     * Aqui não há cadeia de fallback como em METAS_FUNCAO: cada coluna tem uma
-     * única origem. `_representante_telefone` está preenchida em 122 dos 134
-     * usuários e a secundária em 82.
+     * As `_representante_*` vêm primeiro: são as que o representante da associada
+     * preencheu. As `_profissionais_*` entram como reserva — a leitura antiga de
+     * que eram "outra população de usuários do portal" não se sustentou: dos
+     * 1.783 usuários que o sync vincula hoje, 1.661 não têm nenhuma meta
+     * `_representante_telefone*` e 1.640 desses têm `_profissionais_telefone`.
+     * Sem a reserva, o contato entra sem telefone nenhum.
      *
-     * `_profissionais_telefone`/`_profissionais_celular` têm mais linhas (1.773 e
-     * 1.611) e ficam de fora: são de outra população de usuários do portal, não
-     * dos representantes das associadas.
+     * Nenhuma das duas `_profissionais_*` aparece repetida com valores
+     * divergentes nessa população, então o critério de menor umeta_id não corre
+     * o risco que barrou `_profissionais_funcao_cargo` por tanto tempo.
+     *
+     * Ressalva conhecida: 7 usuários têm só o celular. Eles entram com
+     * `telefone_2` preenchido e `telefone` vazio — cada coluna guarda a sua
+     * origem, sem remanejar valor de uma para a outra.
      */
     private const METAS_TELEFONE = [
-        'telefone' => '_representante_telefone',
-        'telefone_2' => '_representante_telefone_secundario',
+        'telefone' => ['_representante_telefone', '_profissionais_telefone'],
+        'telefone_2' => ['_representante_telefone_secundario', '_profissionais_celular'],
     ];
 
     /**
@@ -128,6 +155,15 @@ class AssociadosSyncService
     private array $metaIgnore = [];
 
     private int $contactUserId = 1;
+
+    /** Ponte Gravity Forms => associada ligada? (config + tabela presente na origem) */
+    private bool $gfEnabled = false;
+
+    private string $gfEntryMetaTable = 'wp_gf_entry_meta';
+
+    private string $gfEntryMetaKey = 'entry_id';
+
+    private string $gfAssocField = '19';
 
     /** @var array<string,int> dígitos do documento => clients.id */
     private array $byDigits = [];
@@ -287,6 +323,7 @@ class AssociadosSyncService
         $this->limits = ['clients' => [], 'client_contatos' => [], 'client_enderecos' => []];
         $this->hasObsCadastro = false;
         $this->fakeId = 0;
+        $this->gfEnabled = false;
     }
 
     private function loadConfig(): void
@@ -294,6 +331,11 @@ class AssociadosSyncService
         $this->cnpjMetaLike = (string) config('associados.cnpj_meta_like', '%cnpj_associada%');
         $this->metaIgnore = array_values((array) config('associados.meta_ignore', []));
         $this->contactUserId = (int) config('associados.sync.contact_user_id', 1);
+
+        $this->gfEnabled = (bool) config('associados.gravity_forms.enabled', false);
+        $this->gfEntryMetaTable = (string) config('associados.gravity_forms.entry_meta_table', 'wp_gf_entry_meta');
+        $this->gfEntryMetaKey = (string) config('associados.gravity_forms.entry_meta_key', 'entry_id');
+        $this->gfAssocField = (string) config('associados.gravity_forms.assoc_field', '19');
     }
 
     private function source(): \Illuminate\Database\ConnectionInterface
@@ -310,6 +352,12 @@ class AssociadosSyncService
                 if (! $srcSchema->hasTable($table)) {
                     throw AssociadosSyncException::tabelaAusente($this->sourceConnection, $table);
                 }
+            }
+
+            // A tabela do Gravity Forms é opcional: ausente (plugin removido,
+            // banco de homologação enxuto) só desliga a ponte, não derruba o sync.
+            if ($this->gfEnabled && ! $srcSchema->hasTable($this->gfEntryMetaTable)) {
+                $this->gfEnabled = false;
             }
         } catch (AssociadosSyncException $e) {
             throw $e;
@@ -578,10 +626,130 @@ class AssociadosSyncService
             }
         }
 
+        if ($this->gfEnabled) {
+            $this->mapUsersViaGravityForms($grupos, $sets, $report);
+        } elseif ((bool) config('associados.gravity_forms.enabled', false)) {
+            $this->warn($report, 'Ponte do Gravity Forms ligada na config mas a tabela de entradas não existe na origem — usuários sem meta de CNPJ ficarão de fora', [
+                'tabela' => $this->gfEntryMetaTable,
+            ]);
+        }
+
         foreach ($sets as $digits => $set) {
             $ids = array_keys($set);
             sort($ids);
             $this->usersPorCnpj[(string) $digits] = $ids;
+        }
+    }
+
+    /**
+     * Fase C-bis — usuários que o formulário novo do portal deixou sem meta de
+     * CNPJ, recuperados pela entrada do Gravity Forms que os cadastrou.
+     *
+     * O caminho tem três saltos, todos configuráveis em
+     * config('associados.gravity_forms'):
+     *
+     *   wp_usermeta[entry_meta_key]        usuário  => id da entrada
+     *   wp_gf_entry_meta[assoc_field]      entrada  => ID do usuário da associada
+     *   wp_usermeta[cnpj_meta_like]        associada => CNPJ
+     *
+     * Só entra usuário SEM nenhum vínculo por meta. Quem já foi resolvido pelo
+     * caminho antigo fica como está: a meta é a fonte mais confiável, e deixar o
+     * formulário sobrepor arrastaria a pessoa para uma segunda empresa.
+     *
+     * @param array<string,list<string>>    $grupos dígitos => variantes cruas na origem
+     * @param array<string,array<int,true>> $sets   dígitos => user_ids já vinculados (alterado aqui)
+     */
+    private function mapUsersViaGravityForms(array $grupos, array &$sets, AssociadosSyncReport $report): void
+    {
+        $jaVinculados = [];
+        foreach ($sets as $set) {
+            foreach (array_keys($set) as $userId) {
+                $jaVinculados[$userId] = true;
+            }
+        }
+
+        // Salto 3 ao contrário: usuário-associada => dígitos do CNPJ. Só os
+        // grupos desta execução entram, para o --limit continuar valendo.
+        $assocParaDigits = [];
+
+        $rows = $this->source()->table('wp_usermeta')
+            ->where('meta_key', 'like', $this->cnpjMetaLike)
+            ->whereNotNull('meta_value')
+            ->where('meta_value', '<>', '')
+            ->get(['user_id', 'meta_value']);
+
+        foreach ($rows as $row) {
+            $digits = Normalizer::digits((string) $row->meta_value);
+
+            if (isset($grupos[$digits])) {
+                $assocParaDigits[(int) $row->user_id] = $digits;
+            }
+        }
+
+        if ($assocParaDigits === []) {
+            return;
+        }
+
+        // Salto 2: entradas do formulário que apontam para essas associadas.
+        // whereIn com STRINGS pelo mesmo motivo da fase C: meta_value é texto e
+        // a comparação numérica casaria prefixos.
+        $entryParaDigits = [];
+
+        foreach (array_chunk(array_map(strval(...), array_keys($assocParaDigits)), self::WHEREIN_BATCH) as $batch) {
+            $entryRows = $this->source()->table($this->gfEntryMetaTable)
+                ->where('meta_key', $this->gfAssocField)
+                ->whereIn('meta_value', $batch)
+                ->get(['entry_id', 'meta_value']);
+
+            foreach ($entryRows as $row) {
+                $assocId = (int) $row->meta_value;
+
+                if (isset($assocParaDigits[$assocId])) {
+                    $entryParaDigits[(string) $row->entry_id] = $assocParaDigits[$assocId];
+                }
+            }
+        }
+
+        if ($entryParaDigits === []) {
+            return;
+        }
+
+        // Salto 1: usuários cadastrados por essas entradas.
+        $viaFormulario = [];
+
+        foreach (array_chunk(array_map(strval(...), array_keys($entryParaDigits)), self::WHEREIN_BATCH) as $batch) {
+            $userRows = $this->source()->table('wp_usermeta')
+                ->where('meta_key', $this->gfEntryMetaKey)
+                ->whereIn('meta_value', $batch)
+                ->get(['user_id', 'meta_value']);
+
+            foreach ($userRows as $row) {
+                $userId = (int) $row->user_id;
+                $digits = $entryParaDigits[(string) $row->meta_value] ?? null;
+
+                if ($digits === null || isset($jaVinculados[$userId])) {
+                    continue;
+                }
+
+                if (isset($viaFormulario[$userId])) {
+                    // Duas entradas para o mesmo usuário apontando para empresas
+                    // diferentes: vale a primeira, senão ele viraria contato de
+                    // duas associadas. O empate silencioso seria pior que o aviso.
+                    if ($viaFormulario[$userId] !== $digits) {
+                        $this->warn($report, 'Usuário com duas entradas de formulário apontando para CNPJs diferentes — vale a primeira', [
+                            'user_id' => $userId,
+                            'cnpj_usado' => $viaFormulario[$userId],
+                            'cnpj_ignorado' => $digits,
+                        ]);
+                    }
+
+                    continue;
+                }
+
+                $viaFormulario[$userId] = $digits;
+                $sets[$digits][$userId] = true;
+                $report->vinculosViaFormulario++;
+            }
         }
     }
 
@@ -639,10 +807,51 @@ class AssociadosSyncService
      */
     private function montaFuncaoPessoal(array $metas): ?string
     {
-        foreach (self::METAS_FUNCAO as $meta) {
+        return $this->primeiraMetaComValor($metas, self::METAS_FUNCAO);
+    }
+
+    /**
+     * Primeira meta da cadeia com valor não-vazio; null se nenhuma tiver.
+     *
+     * @param array<string,string> $metas meta_key => meta_value do usuário
+     * @param list<string>         $cadeia meta_keys em ordem de preferência
+     */
+    private function primeiraMetaComValor(array $metas, array $cadeia): ?string
+    {
+        foreach ($cadeia as $meta) {
             $valor = Normalizer::trimOrNull((string) ($metas[$meta] ?? ''));
 
             if ($valor !== null) {
+                return $valor;
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * Telefone da cadeia: a primeira meta cujo valor pareça mesmo um telefone.
+     *
+     * O campo é texto livre no WP e recebeu de tudo. Na conferência de
+     * 03/09/2026: 39 `_profissionais_celular` com '0 -' ou '(' de formulário
+     * enviado pela metade, um `_profissionais_telefone` com '82 -' e dois
+     * `_representante_telefone` com 'DIRETOR' — alguém digitou o cargo no campo
+     * do telefone. Sem o piso de dígitos esse lixo não só entraria na coluna
+     * como apagaria o número certo digitado à mão no CRUD, já que valor
+     * não-vazio do WP sobrescreve o do destino.
+     *
+     * Valor barrado devolve null e a regra de "vazio nunca anula" preserva o que
+     * já está gravado — o lixo antigo continua lá, mas não se multiplica.
+     *
+     * @param array<string,string> $metas  meta_key => meta_value do usuário
+     * @param list<string>         $cadeia meta_keys em ordem de preferência
+     */
+    private function primeiroTelefoneComValor(array $metas, array $cadeia): ?string
+    {
+        foreach ($cadeia as $meta) {
+            $valor = Normalizer::trimOrNull((string) ($metas[$meta] ?? ''));
+
+            if ($valor !== null && strlen(Normalizer::digits($valor)) >= self::MIN_DIGITOS_TELEFONE) {
                 return $valor;
             }
         }
@@ -673,7 +882,7 @@ class AssociadosSyncService
             // Nome, função e telefones do contato: as metas do WP, por chave.
             $rows = $this->source()->table('wp_usermeta')
                 ->whereIn('user_id', $batch)
-                ->whereIn('meta_key', [...self::METAS_NOME_PESSOAL, ...self::METAS_FUNCAO, ...array_values(self::METAS_TELEFONE)])
+                ->whereIn('meta_key', [...self::METAS_NOME_PESSOAL, ...self::METAS_FUNCAO, ...array_merge(...array_values(self::METAS_TELEFONE))])
                 ->orderBy('umeta_id')
                 ->get(['user_id', 'meta_key', 'meta_value']);
 
@@ -689,8 +898,8 @@ class AssociadosSyncService
                 $this->nomePessoal[$userId] = $this->montaNomePessoal($metas);
                 $this->funcaoPessoal[$userId] = $this->montaFuncaoPessoal($metas);
 
-                foreach (self::METAS_TELEFONE as $coluna => $meta) {
-                    $this->telefonesPessoais[$userId][$coluna] = Normalizer::trimOrNull((string) ($metas[$meta] ?? ''));
+                foreach (self::METAS_TELEFONE as $coluna => $metasDaColuna) {
+                    $this->telefonesPessoais[$userId][$coluna] = $this->primeiroTelefoneComValor($metas, $metasDaColuna);
                 }
             }
 

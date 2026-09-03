@@ -15,6 +15,11 @@ use Illuminate\Support\Facades\Log;
  * Chave do cliente é o CNPJ (dígitos normalizados); cliente existente é
  * atualizado (associado_abac + meta_map), inexistente é criado. Chave do
  * contato é client_id + e-mail. Idempotente.
+ *
+ * Usuário sem meta de CNPJ (cadastro feito pelo formulário novo do portal) é
+ * vinculado pela entrada do Gravity Forms — a linha "Vínculos recuperados pelo
+ * Gravity Forms" do relatório mostra quantos entraram por aí. Para desligar a
+ * ponte e comparar com o comportamento antigo: ASSOCIADOS_SYNC_GRAVITY_FORMS=false.
  */
 class AssociadosSync extends Command
 {
