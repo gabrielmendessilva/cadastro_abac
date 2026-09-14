@@ -25,6 +25,9 @@ final class AssociadosSyncReport
 
     public int $contatosSemMudanca = 0;
 
+    /** `telefone_2` esvaziados por serem cópia do celular — ver limpezaTelefone2(). */
+    public int $telefone2Limpos = 0;
+
     public int $enderecosCriados = 0;
 
     public int $enderecosAtualizados = 0;
@@ -78,7 +81,7 @@ final class AssociadosSyncReport
     }
 
     /**
-     * @param array<string,int> $counters
+     * @param  array<string,int>  $counters
      */
     public function restoreCounters(array $counters): void
     {
@@ -88,7 +91,7 @@ final class AssociadosSyncReport
     }
 
     /**
-     * @param array<string,mixed> $context
+     * @param  array<string,mixed>  $context
      */
     public function warn(string $message, array $context = []): void
     {
@@ -114,6 +117,7 @@ final class AssociadosSyncReport
             ['Contatos criados', $this->contatosCriados],
             ['Contatos atualizados', $this->contatosAtualizados],
             ['Contatos sem mudança', $this->contatosSemMudanca],
+            ['Telefone 2 limpos (cópia do celular)', $this->telefone2Limpos],
             ['Endereços criados', $this->enderecosCriados],
             ['Endereços atualizados', $this->enderecosAtualizados],
             ['Endereços sem mudança', $this->enderecosSemMudanca],
@@ -144,6 +148,7 @@ final class AssociadosSyncReport
             'contatos_criados' => $this->contatosCriados,
             'contatos_atualizados' => $this->contatosAtualizados,
             'contatos_sem_mudanca' => $this->contatosSemMudanca,
+            'telefone_2_limpos' => $this->telefone2Limpos,
             'enderecos_criados' => $this->enderecosCriados,
             'enderecos_atualizados' => $this->enderecosAtualizados,
             'enderecos_sem_mudanca' => $this->enderecosSemMudanca,

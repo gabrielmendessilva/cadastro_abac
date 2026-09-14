@@ -63,14 +63,33 @@ class RmImportService
         'num_filiacao_abac', 'dt_filiacao_abac',
         'num_filiacao_sinac', 'dt_filiacao_sinac',
         'dt_abertura_empresa', 'categoria',
-        'situacao_abac', 'ocorrencia_abac',
+        'situacao_abac', 'ocorrencia_abac', 'obs_cadastro',
     ];
+
+    /**
+     * Prefixo do texto de proveniência que a própria carga grava em obs_cadastro
+     * quando o RM não traz OBSERVACAO. Serve de marca: obs_cadastro que só tem
+     * isso é conteúdo automático, não observação digitada — o backfill pode
+     * substituí-lo pela OBSERVACAO do RM sem pisar em dado humano.
+     */
+    private const OBS_PROVENIENCIA_PREFIXO = 'Importado do TOTVS RM';
 
     /** Idem para client_contatos: colunas alimentadas por FCFOCONTATO/FCFOCONTATOCOMPL. */
     private const CONTATO_RM_COLUMNS = [
         'funcao', 'dt_nascimento', 'aniversario', 'celular',
         'departamento', 'outro_departamento', 'representante_legal', 'comite',
     ];
+
+    /**
+     * Colunas de identificação do contato: o rm:import só as escreve na criação,
+     * porque sobrescrever e-mail ou telefone de quem já está aqui é perder o dado
+     * que a secretaria digitou. O modo --somente-contatos as completa quando
+     * estão vazias — aí não há nada a perder, só buraco a tapar.
+     */
+    private const CONTATO_BASE_COLUMNS = ['email', 'email_2', 'telefone', 'ramal'];
+
+    /** Colunas de client_contatos cujo valor corrente é cacheado para o backfill. */
+    private const CONTATO_TRACKED_COLUMNS = [...self::CONTATO_RM_COLUMNS, ...self::CONTATO_BASE_COLUMNS];
 
     /**
      * Colunas de FCFOCONTATOCOMPL que já têm destino próprio — as demais (custom
@@ -156,6 +175,7 @@ class RmImportService
             'chunk' => $options->chunkSize,
             'backfill' => $options->backfill,
             'somente_enderecos' => $options->somenteEnderecos,
+            'somente_contatos' => $options->somenteContatos,
         ]);
 
         $this->reader->preflight();
@@ -189,7 +209,7 @@ class RmImportService
                         : [];
 
                     foreach ($rows as $fcfo) {
-                        $key = ((int) $fcfo['CODCOLIGADA']) . '|' . trim((string) $fcfo['CODCFO']);
+                        $key = ((int) $fcfo['CODCOLIGADA']).'|'.trim((string) $fcfo['CODCFO']);
 
                         try {
                             $this->processFcfoRow(
@@ -218,7 +238,7 @@ class RmImportService
             );
         });
 
-        if (! $options->somenteEnderecos) {
+        if (! $options->somenteEnderecos && ! $options->somenteContatos) {
             $this->desativaForaDeOrdem($options, $report);
         }
 
@@ -248,11 +268,11 @@ class RmImportService
     }
 
     /**
-     * @param array<string,mixed> $fcfo
-     * @param list<array<string,mixed>> $contatos
-     * @param list<array<string,mixed>> $defRows
-     * @param array<string,mixed> $fcfoCompl linha de FCFOCOMPL do cli/for
-     * @param array<string,array<string,mixed>> $complMap
+     * @param  array<string,mixed>  $fcfo
+     * @param  list<array<string,mixed>>  $contatos
+     * @param  list<array<string,mixed>>  $defRows
+     * @param  array<string,mixed>  $fcfoCompl  linha de FCFOCOMPL do cli/for
+     * @param  array<string,array<string,mixed>>  $complMap
      */
     private function processFcfoRow(
         array $fcfo,
@@ -285,6 +305,20 @@ class RmImportService
         if ($options->somenteEnderecos) {
             if ($clientId !== null) {
                 $this->backfillEnderecos($clientId, $fcfo, $options, $report);
+            }
+
+            $this->rmSeenDigits[$digits] = true;
+
+            return;
+        }
+
+        // Idem para o modo só-contatos: sem criar cliente e sem passar por
+        // endereço, centro de custo, site, campos opcionais ou desativação.
+        if ($options->somenteContatos) {
+            if ($clientId === null) {
+                $report->clientsPuladosAusentes++;
+            } elseif ($contatos !== []) {
+                $this->processContatos($clientId, $contatos, $complMap, $options, $report);
             }
 
             $this->rmSeenDigits[$digits] = true;
@@ -339,8 +373,8 @@ class RmImportService
     }
 
     /**
-     * @param array<string,mixed> $fcfo
-     * @param list<array<string,mixed>> $defRows
+     * @param  array<string,mixed>  $fcfo
+     * @param  list<array<string,mixed>>  $defRows
      */
     private function createClient(
         array $fcfo,
@@ -382,7 +416,7 @@ class RmImportService
 
         if ($cc !== null) {
             $report->centrosCustoCriados++;
-            $this->ccExisting[$clientId . '|' . $cc['codigo']] = true;
+            $this->ccExisting[$clientId.'|'.$cc['codigo']] = true;
         }
 
         if ($site !== null) {
@@ -417,11 +451,11 @@ class RmImportService
      * Cria a linha de centros_custo para o cliente se o par (client_id, codigo)
      * ainda não existir. Retorna true quando criou (ou criaria, no dry-run).
      *
-     * @param array<string,mixed> $cc
+     * @param  array<string,mixed>  $cc
      */
     private function attachCentroCusto(int $clientId, array $cc, RmImportOptions $options): bool
     {
-        $pair = $clientId . '|' . $cc['codigo'];
+        $pair = $clientId.'|'.$cc['codigo'];
 
         if (isset($this->ccExisting[$pair])) {
             return false;
@@ -437,7 +471,7 @@ class RmImportService
     }
 
     /**
-     * @param array<string,mixed> $fcfo
+     * @param  array<string,mixed>  $fcfo
      * @return array<string,mixed>
      */
     private function buildClientAttributes(array $fcfo, string $digits, array $fcfoCompl, RmImportReport $report): array
@@ -511,12 +545,11 @@ class RmImportService
             'emails_boletos' => $emailsBoletos !== [] ? implode('; ', $emailsBoletos) : null,
             'area_atuacao' => Normalizer::trimOrNull((string) ($fcfo['RAMOATIV'] ?? '')),
             'notes' => Normalizer::trimOrNull((string) ($fcfo['CAMPOLIVRE'] ?? '')),
-            'obs_cadastro' => sprintf(
-                'Importado do TOTVS RM em %s — coligada %s, código %s.',
-                now()->format('d/m/Y'),
-                $fcfo['CODCOLIGADA'] ?? '?',
-                trim((string) ($fcfo['CODCFO'] ?? '?')),
-            ),
+            // OBSERVACAO do RM é a Observação do cadastro; sem ela, o cliente novo
+            // fica com a marca de proveniência (que o backfill depois troca pela
+            // OBSERVACAO, se ela aparecer). O explícito aqui vence o buildCamposRm.
+            'obs_cadastro' => Normalizer::trimOrNull((string) ($fcfoCompl['OBSERVACAO'] ?? ''))
+                ?? $this->obsProveniencia($fcfo),
         ] + $this->buildCamposRm($fcfo, $fcfoCompl);
 
         // clients.status é tinyint(1) NOT NULL default 1: grava booleano de verdade e,
@@ -544,7 +577,7 @@ class RmImportService
      * abertura. Mais o tipo de cli/for (CODTCF), taxonomia onde ficam as
      * categorias de sócio especial.
      *
-     * @param array<string,mixed> $fcfo
+     * @param  array<string,mixed>  $fcfo
      * @return array<string,string|null> colunas de CLIENT_RM_COLUMNS
      */
     private function buildCamposRm(array $fcfo, array $fcfoCompl): array
@@ -564,14 +597,35 @@ class RmImportService
             // (início das atividades) só entra quando ela está vazia.
             'dt_abertura_empresa' => Normalizer::toDateOrNull($fcfo['DATAOP1'] ?? null)
                 ?? Normalizer::toDateOrNull($fcfo['DTINICATIVIDADES'] ?? null),
+            // Observação do cadastro (Informações da Empresa). null quando o RM
+            // não traz nada — aí o backfill não mexe no que já está lá.
+            'obs_cadastro' => Normalizer::trimOrNull((string) ($fcfoCompl['OBSERVACAO'] ?? '')),
         ];
+    }
+
+    /**
+     * Texto de proveniência gravado em obs_cadastro na criação quando o RM não
+     * traz OBSERVACAO. É reconhecível pelo prefixo (OBS_PROVENIENCIA_PREFIXO), o
+     * que permite ao backfill tratá-lo como espaço livre depois.
+     *
+     * @param  array<string,mixed>  $fcfo
+     */
+    private function obsProveniencia(array $fcfo): string
+    {
+        return sprintf(
+            '%s em %s — coligada %s, código %s.',
+            self::OBS_PROVENIENCIA_PREFIXO,
+            now()->format('d/m/Y'),
+            $fcfo['CODCOLIGADA'] ?? '?',
+            trim((string) ($fcfo['CODCFO'] ?? '?')),
+        );
     }
 
     /**
      * Descrição do tipo de cli/for (FTCF), com fallback para o próprio código:
      * em 92 dos 97 tipos os dois são iguais, mas o rótulo é o que vale na tela.
      *
-     * @param array<string,mixed> $fcfo
+     * @param  array<string,mixed>  $fcfo
      */
     private function resolveTipoCliFor(array $fcfo): ?string
     {
@@ -583,14 +637,14 @@ class RmImportService
 
         $coligada = (int) ($fcfo['CODCOLTCF'] ?? $fcfo['CODCOLIGADA'] ?? 0);
 
-        return $this->tiposCliFor[$coligada . '|' . $codigo] ?? $codigo;
+        return $this->tiposCliFor[$coligada.'|'.$codigo] ?? $codigo;
     }
 
     /**
      * Preenche em cliente já existente só as colunas do RM ainda vazias —
      * valor digitado no app (ou vindo de outra carga) nunca é sobrescrito.
      *
-     * @param array<string,mixed> $fcfo
+     * @param  array<string,mixed>  $fcfo
      */
     private function backfillCamposRm(
         int $clientId,
@@ -605,7 +659,7 @@ class RmImportService
         foreach ($this->buildCamposRm($fcfo, $fcfoCompl) as $coluna => $valor) {
             $atual = $atuais[$coluna] ?? null;
 
-            if ($valor === null || trim((string) $atual) !== '') {
+            if ($valor === null || $this->backfillOcupado($coluna, $atual)) {
                 continue;
             }
 
@@ -629,6 +683,30 @@ class RmImportService
     }
 
     /**
+     * Coluna do backfill que já tem conteúdo de verdade e não pode ser
+     * sobrescrita. Vazio nunca está ocupado.
+     *
+     * obs_cadastro só com a marca de proveniência da carga conta como livre: é
+     * texto que o próprio import gerou, não observação digitada — pode ceder
+     * lugar à OBSERVACAO do RM. Qualquer outro conteúdo (alguém editou à mão)
+     * é preservado.
+     */
+    private function backfillOcupado(string $coluna, mixed $atual): bool
+    {
+        $atual = trim((string) $atual);
+
+        if ($atual === '') {
+            return false;
+        }
+
+        if ($coluna === 'obs_cadastro' && str_starts_with($atual, self::OBS_PROVENIENCIA_PREFIXO)) {
+            return false;
+        }
+
+        return true;
+    }
+
+    /**
      * "Cadastro em ordem" no RM: FCFOCOMPL.STATUS = 'OK' E OCORRENCIA = 'OK' —
      * o mesmo par que a secretaria usava para recortar os relatórios.
      *
@@ -636,7 +714,7 @@ class RmImportService
      * o cadastro não está em ordem. A comparação é frouxa de propósito (aparam-se
      * espaços e o caixa varia na origem: 'OK', 'ok', 'Ok ').
      *
-     * @param array<string,mixed> $fcfoCompl linha de FCFOCOMPL do cli/for
+     * @param  array<string,mixed>  $fcfoCompl  linha de FCFOCOMPL do cli/for
      */
     private function cadastroEmOrdem(array $fcfoCompl): bool
     {
@@ -697,7 +775,7 @@ class RmImportService
      * client_redes_sociais (tipo 'site'), exibido em Cadastro > Informações da
      * empresa — `clients` não tem coluna de site.
      *
-     * @param array<string,mixed> $fcfo
+     * @param  array<string,mixed>  $fcfo
      * @return array<string,mixed>|null atributos da rede social, sem o client_id
      */
     private function resolveSite(array $fcfo, RmImportReport $report): ?array
@@ -732,7 +810,7 @@ class RmImportService
      * Cria a rede social do site para o cliente que ainda não tem nenhuma do
      * tipo. Retorna true quando criou (ou criaria, no dry-run).
      *
-     * @param array<string,mixed> $site
+     * @param  array<string,mixed>  $site
      */
     private function attachSite(int $clientId, array $site, RmImportOptions $options): bool
     {
@@ -761,7 +839,7 @@ class RmImportService
      * então cliente que já existia quando o RM rodou ficava sem cidade/estado na
      * lista para sempre — com o endereço parado na FCFO.
      *
-     * @param array<string,mixed> $fcfo
+     * @param  array<string,mixed>  $fcfo
      */
     private function backfillEnderecos(
         int $clientId,
@@ -798,7 +876,7 @@ class RmImportService
      * bairro, pais, estado, cod_ibge e municipio são NOT NULL. Como o RM preenche
      * esses campos de forma esparsa, a ausência vira string vazia em vez de null.
      *
-     * @param array<string,mixed> $fcfo
+     * @param  array<string,mixed>  $fcfo
      * @return list<array<string,mixed>>
      */
     private function buildEnderecos(array $fcfo): array
@@ -841,8 +919,8 @@ class RmImportService
     }
 
     /**
-     * @param list<array<string,mixed>> $contatos
-     * @param array<string,array<string,mixed>> $complMap
+     * @param  list<array<string,mixed>>  $contatos
+     * @param  array<string,array<string,mixed>>  $complMap
      */
     private function processContatos(
         int $clientId,
@@ -860,25 +938,18 @@ class RmImportService
 
             if ($emails === [] && $nomeKey === '') {
                 $report->contatosPuladosSemChave++;
+
                 continue;
             }
 
-            $existenteId = null;
-
-            if ($emails !== [] && isset($keys['emails'][$emails[0]])) {
-                $report->contatosPuladosEmail++;
-                $existenteId = $keys['emails'][$emails[0]];
-            } elseif ($emails === [] && isset($keys['names'][$nomeKey])) {
-                $report->contatosPuladosNome++;
-                $existenteId = $keys['names'][$nomeKey];
-            }
+            $existenteId = $this->matchContato($keys, $emails, $nomeKey, $options, $report);
 
             if ($existenteId !== null) {
                 // Contato já cadastrado não é reescrito: só ganha as colunas do RM
                 // que continuam vazias e os comitês que ainda não tem. Id 0 é
                 // semente do e-mail do próprio cliente — não há linha para completar.
-                if ($options->backfill && $existenteId > 0) {
-                    $this->backfillContato($existenteId, $clientId, $contato, $compl, $keys, $options, $report);
+                if (($options->backfill || $options->somenteContatos) && $existenteId > 0) {
+                    $this->backfillContato($existenteId, $clientId, $contato, $emails, $compl, $keys, $options, $report);
                 }
 
                 continue;
@@ -897,13 +968,14 @@ class RmImportService
                         'nome' => $contato['NOME'] ?? null,
                         'erro' => $e->getMessage(),
                     ]);
+
                     continue;
                 }
             }
 
             $report->contatosCriados++;
 
-            $keys['atuais'][$contatoId] = array_intersect_key($attrs, array_flip(self::CONTATO_RM_COLUMNS));
+            $keys['atuais'][$contatoId] = array_intersect_key($attrs, array_flip(self::CONTATO_TRACKED_COLUMNS));
 
             foreach ($emails as $email) {
                 $keys['emails'][$email] = $contatoId;
@@ -917,18 +989,65 @@ class RmImportService
     }
 
     /**
+     * Acha o contato do RM entre os que já estão no destino. O rm:import casa por
+     * e-mail (quando o RM tem um) ou por nome (quando não tem) — deliberadamente
+     * estreito, para não colar duas pessoas homônimas numa só.
+     *
+     * O modo --somente-contatos alarga: tenta todos os e-mails do RM e, se nenhum
+     * bater, cai no nome mesmo assim. É o que permite reconhecer o contato que
+     * está aqui sem e-mail e completá-lo com o do RM, em vez de criar uma segunda
+     * linha para a mesma pessoa.
+     *
+     * @param  array{emails:array<string,int>,names:array<string,int>,atuais:array<int,array<string,mixed>>}  $keys
+     * @param  list<string>  $emails
+     * @return int|null id do contato no destino (0 = semente do e-mail do cliente), null se é gente nova
+     */
+    private function matchContato(
+        array $keys,
+        array $emails,
+        string $nomeKey,
+        RmImportOptions $options,
+        RmImportReport $report,
+    ): ?int {
+        $candidatos = $options->somenteContatos ? $emails : array_slice($emails, 0, 1);
+
+        foreach ($candidatos as $email) {
+            if (isset($keys['emails'][$email])) {
+                $report->contatosPuladosEmail++;
+
+                return $keys['emails'][$email];
+            }
+        }
+
+        $porNome = $options->somenteContatos || $emails === [];
+
+        if ($porNome && $nomeKey !== '' && isset($keys['names'][$nomeKey])) {
+            $report->contatosPuladosNome++;
+
+            return $keys['names'][$nomeKey];
+        }
+
+        return null;
+    }
+
+    /**
      * Completa um contato que já existe no destino: só colunas alimentadas pelo
      * RM e só quando estão vazias. Os comitês entram sempre que faltarem, porque
      * vivem em tabela satélite própria.
      *
-     * @param array<string,mixed> $contato
-     * @param array<string,mixed> $compl
-     * @param array{emails:array<string,int>,names:array<string,int>,atuais:array<int,array<string,mixed>>} $keys
+     * No modo --somente-contatos as colunas de identificação (e-mail, telefone,
+     * ramal) entram na mesma regra: preenche o que está vazio, nunca sobrescreve.
+     *
+     * @param  array<string,mixed>  $contato
+     * @param  list<string>  $emails
+     * @param  array<string,mixed>  $compl
+     * @param  array{emails:array<string,int>,names:array<string,int>,atuais:array<int,array<string,mixed>>}  $keys
      */
     private function backfillContato(
         int $contatoId,
         int $clientId,
         array $contato,
+        array $emails,
         array $compl,
         array &$keys,
         RmImportOptions $options,
@@ -945,6 +1064,10 @@ class RmImportService
             $update[$coluna] = $valor;
         }
 
+        if ($options->somenteContatos) {
+            $update += $this->backfillIdentificacaoContato($contato, $emails, $atuais);
+        }
+
         if ($update !== []) {
             if (! $options->dryRun) {
                 DB::table('client_contatos')->where('id', $contatoId)->update($update);
@@ -953,10 +1076,61 @@ class RmImportService
             foreach ($update as $coluna => $valor) {
                 $report->backfillContato[$coluna]++;
                 $keys['atuais'][$contatoId][$coluna] = $valor;
+
+                // E-mail recém-gravado vira chave de dedup: sem isso o mesmo
+                // endereço vindo de outra linha do RM abriria um contato novo.
+                if (in_array($coluna, ['email', 'email_2'], true)) {
+                    $keys['emails'][mb_strtolower($valor)] = $contatoId;
+                }
             }
         }
 
         $this->attachComites($clientId, $contatoId, $compl, $options, $report);
+    }
+
+    /**
+     * E-mail, telefone e ramal do RM para as colunas que estão vazias no destino.
+     * Os e-mails entram nas colunas livres na ordem do RM, pulando os que o
+     * contato já tem; o que não couber em `email`/`email_2` fica de fora.
+     *
+     * @param  array<string,mixed>  $contato
+     * @param  list<string>  $emails
+     * @param  array<string,mixed>  $atuais  valor corrente das colunas do contato
+     * @return array<string,string> só as colunas a gravar
+     */
+    private function backfillIdentificacaoContato(array $contato, array $emails, array $atuais): array
+    {
+        $update = [];
+
+        $jaTem = [];
+        foreach (['email', 'email_2'] as $coluna) {
+            $valor = mb_strtolower(trim((string) ($atuais[$coluna] ?? '')));
+            if ($valor !== '') {
+                $jaTem[] = $valor;
+            }
+        }
+
+        $novos = array_values(array_diff($emails, $jaTem));
+
+        foreach (['email', 'email_2'] as $coluna) {
+            if ($novos === [] || trim((string) ($atuais[$coluna] ?? '')) !== '') {
+                continue;
+            }
+
+            $update[$coluna] = array_shift($novos);
+        }
+
+        $telefone = Normalizer::limit((string) ($contato['TELEFONE'] ?? ''), 255);
+        if ($telefone !== null && trim((string) ($atuais['telefone'] ?? '')) === '') {
+            $update['telefone'] = $telefone;
+        }
+
+        $ramal = Normalizer::limit((string) ($contato['RAMAL'] ?? ''), 30);
+        if ($ramal !== null && trim((string) ($atuais['ramal'] ?? '')) === '') {
+            $update['ramal'] = $ramal;
+        }
+
+        return $update;
     }
 
     /**
@@ -984,7 +1158,9 @@ class RmImportService
         if ($clientId > 0) {
             $rows = DB::table('client_contatos')
                 ->where('client_id', $clientId)
-                ->get(array_merge(['id', 'email', 'email_2', 'nome'], self::CONTATO_RM_COLUMNS));
+                ->get(array_values(array_unique(
+                    array_merge(['id', 'nome'], self::CONTATO_TRACKED_COLUMNS)
+                )));
 
             foreach ($rows as $row) {
                 $id = (int) $row->id;
@@ -1002,7 +1178,7 @@ class RmImportService
                 }
 
                 $valores = [];
-                foreach (self::CONTATO_RM_COLUMNS as $col) {
+                foreach (self::CONTATO_TRACKED_COLUMNS as $col) {
                     $valores[$col] = $row->{$col};
                 }
                 $atuais[$id] = $valores;
@@ -1015,9 +1191,9 @@ class RmImportService
     }
 
     /**
-     * @param array<string,mixed> $contato
-     * @param list<string> $emails
-     * @param array<string,mixed> $compl linha de FCFOCONTATOCOMPL do contato
+     * @param  array<string,mixed>  $contato
+     * @param  list<string>  $emails
+     * @param  array<string,mixed>  $compl  linha de FCFOCONTATOCOMPL do contato
      * @return array<string,mixed>
      */
     private function buildContatoAttributes(int $clientId, array $contato, array $emails, array $compl): array
@@ -1036,7 +1212,7 @@ class RmImportService
         }
 
         if (count($emails) > 2) {
-            $obsParts[] = 'E-mails: ' . implode('; ', array_slice($emails, 2));
+            $obsParts[] = 'E-mails: '.implode('; ', array_slice($emails, 2));
         }
 
         // Campo complementar custom sem coluna própria no destino segue como texto.
@@ -1073,8 +1249,8 @@ class RmImportService
      * REPRESENTANTE vêm da FCFOCONTATOCOMPL, e `comite` é só a marcação — os
      * comitês em si viram linhas em client_comites.
      *
-     * @param array<string,mixed> $contato
-     * @param array<string,mixed> $compl
+     * @param  array<string,mixed>  $contato
+     * @param  array<string,mixed>  $compl
      * @return array<string,string|null> colunas de CONTATO_RM_COLUMNS
      */
     private function buildCamposRmContato(array $contato, array $compl): array
@@ -1104,8 +1280,8 @@ class RmImportService
      * base guarda exatamente isso; FCFOCONTATOCOMPL.ANIV, quando existe, é data
      * completa e entra só como reserva.
      *
-     * @param array<string,mixed> $contato
-     * @param array<string,mixed> $compl
+     * @param  array<string,mixed>  $contato
+     * @param  array<string,mixed>  $compl
      */
     private function resolveAniversario(array $contato, array $compl): ?string
     {
@@ -1142,7 +1318,7 @@ class RmImportService
      * separado por "/". Quando essa coluna está vazia, o mesmo dado às vezes ficou
      * em OUTROS ("COMITE JURÍDICO") — daí a reserva.
      *
-     * @param array<string,mixed> $compl
+     * @param  array<string,mixed>  $compl
      * @return list<array{nome:string,papel:string}> nome oficial da lista de domínio (ou o do RM)
      */
     private function resolveComites(array $compl): array
@@ -1200,7 +1376,7 @@ class RmImportService
             return $this->comitesDominio[$chave];
         }
 
-        $variante = str_ends_with($chave, 'S') ? substr($chave, 0, -1) : $chave . 'S';
+        $variante = str_ends_with($chave, 'S') ? substr($chave, 0, -1) : $chave.'S';
         if (isset($this->comitesDominio[$variante])) {
             return $this->comitesDominio[$variante];
         }
@@ -1236,7 +1412,7 @@ class RmImportService
     /**
      * Cria os vínculos de comitê que ainda não existem para o contato.
      *
-     * @param array<string,mixed> $compl
+     * @param  array<string,mixed>  $compl
      */
     private function attachComites(
         int $clientId,
@@ -1246,7 +1422,7 @@ class RmImportService
         RmImportReport $report,
     ): void {
         foreach ($this->resolveComites($compl) as ['nome' => $nome, 'papel' => $papel]) {
-            $chave = $clientId . '|' . $contatoId . '|' . $nome;
+            $chave = $clientId.'|'.$contatoId.'|'.$nome;
 
             if (isset($this->comitesExistentes[$chave])) {
                 continue;
@@ -1289,7 +1465,7 @@ class RmImportService
     /** @param array<string,mixed> $contato */
     private function complKey(array $contato): string
     {
-        return ((int) $contato['CODCOLIGADA']) . '|' . trim((string) $contato['CODCFO']) . '|' . $contato['IDCONTATO'];
+        return ((int) $contato['CODCOLIGADA']).'|'.trim((string) $contato['CODCFO']).'|'.$contato['IDCONTATO'];
     }
 
     /**
@@ -1301,7 +1477,7 @@ class RmImportService
     {
         $esperado = [
             'clients' => self::CLIENT_RM_COLUMNS,
-            'client_contatos' => self::CONTATO_RM_COLUMNS,
+            'client_contatos' => self::CONTATO_TRACKED_COLUMNS,
         ];
 
         foreach ($esperado as $tabela => $colunas) {
@@ -1327,7 +1503,7 @@ class RmImportService
                 continue;
             }
 
-            $this->tiposCliFor[((int) ($row['CODCOLIGADA'] ?? 0)) . '|' . $codigo] = $descricao;
+            $this->tiposCliFor[((int) ($row['CODCOLIGADA'] ?? 0)).'|'.$codigo] = $descricao;
         }
     }
 
@@ -1344,10 +1520,11 @@ class RmImportService
                 $this->warn($report, 'GCCUSTO com CODCCUSTO vazio — ignorado', [
                     'coligada' => $row['CODCOLIGADA'] ?? null,
                 ]);
+
                 continue;
             }
 
-            $key = ((int) ($row['CODCOLIGADA'] ?? 0)) . '|' . $codigo;
+            $key = ((int) ($row['CODCOLIGADA'] ?? 0)).'|'.$codigo;
 
             $this->ccDetails[$key] = [
                 'codigo' => Normalizer::limit($codigo, 30),
@@ -1410,7 +1587,7 @@ class RmImportService
         }
 
         foreach (DB::table('centros_custo')->get(['client_id', 'codigo']) as $cc) {
-            $this->ccExisting[((int) $cc->client_id) . '|' . $cc->codigo] = true;
+            $this->ccExisting[((int) $cc->client_id).'|'.$cc->codigo] = true;
         }
 
         foreach (DB::table('client_redes_sociais')->where('tipo', 'site')->pluck('client_id') as $clientId) {
@@ -1429,7 +1606,7 @@ class RmImportService
 
         foreach (DB::table('client_comites')->get(['client_id', 'contato_id', 'comite_nome']) as $cm) {
             $this->comitesExistentes[
-                ((int) $cm->client_id) . '|' . ((int) $cm->contato_id) . '|' . $cm->comite_nome
+                ((int) $cm->client_id).'|'.((int) $cm->contato_id).'|'.$cm->comite_nome
             ] = true;
         }
     }
@@ -1440,8 +1617,8 @@ class RmImportService
      * coligada do cli/for; lookup com fallback para a coligada do FCFO
      * (convenção RM de coligada 0 = global).
      *
-     * @param array<string,mixed> $fcfo
-     * @param list<array<string,mixed>> $defRows
+     * @param  array<string,mixed>  $fcfo
+     * @param  list<array<string,mixed>>  $defRows
      * @return array<string,mixed>|null
      */
     private function resolveCentroCusto(array $fcfo, array $defRows, RmImportReport $report): ?array
@@ -1466,8 +1643,8 @@ class RmImportService
             }
 
             $defColigada = (int) ($def['CODCOLIGADA'] ?? 0);
-            $cc = $this->ccDetails[$defColigada . '|' . $codigo]
-                ?? $this->ccDetails[$fcfoColigada . '|' . $codigo]
+            $cc = $this->ccDetails[$defColigada.'|'.$codigo]
+                ?? $this->ccDetails[$fcfoColigada.'|'.$codigo]
                 ?? null;
 
             if ($cc !== null) {
@@ -1499,11 +1676,11 @@ class RmImportService
     }
 
     /**
-     * @param array<string,mixed> $context
+     * @param  array<string,mixed>  $context
      */
     private function warn(RmImportReport $report, string $message, array $context = []): void
     {
         $report->warn($message, $context);
-        $this->logger->warning('rm.import.warn: ' . $message, $context);
+        $this->logger->warning('rm.import.warn: '.$message, $context);
     }
 }

@@ -2,6 +2,7 @@
 
 namespace Tests\Feature\Associados;
 
+use App\Models\ClientContato;
 use App\Services\Associados\AssociadosSyncOptions;
 use App\Services\Associados\AssociadosSyncService;
 use Illuminate\Support\Facades\DB;
@@ -75,6 +76,11 @@ class AssociadosSyncServiceTest extends TestCase
                 $t->string('email')->nullable();
                 $t->string('telefone')->nullable();
                 $t->string('telefone_2')->nullable();
+                $t->string('celular', 30)->nullable();
+                $t->string('ramal', 30)->nullable();
+                $t->string('departamento')->nullable();
+                $t->string('dt_nascimento')->nullable();
+                $t->string('aniversario', 5)->nullable();
                 $t->boolean('unlock_whatsApp')->default(false);
                 $t->timestamps();
             });
@@ -269,7 +275,166 @@ class AssociadosSyncServiceTest extends TestCase
 
         $this->assertSame('CTO', $contato->funcao);
         $this->assertSame('(11) 3363-0272', $contato->telefone);
-        $this->assertSame('(11) 93363-0272', $contato->telefone_2);
+        $this->assertSame('(11) 93363-0272', $contato->celular);
+        $this->assertNull($contato->telefone_2);
+    }
+
+    public function test_departamento_e_ramal_do_portal_viram_colunas_do_contato(): void
+    {
+        $this->seedSource();
+        $this->seedEntradaFormulario(userId: 4, email: 'danilo@x.com', nome: 'Danilo', entryId: 77, assocUserId: 1);
+
+        DB::connection('pgsql-associado')->table('wp_usermeta')->insert([
+            ['user_id' => 4, 'meta_key' => '_profissionais_departamento', 'meta_value' => 'JURÍDICO'],
+            // Ramal curto: o piso de dígitos dos telefones descartaria, o texto não.
+            ['user_id' => 4, 'meta_key' => '_profissionais_ramal', 'meta_value' => '6018'],
+        ]);
+
+        $this->service()->run(new AssociadosSyncOptions);
+
+        $contato = DB::table('client_contatos')->where('email', 'danilo@x.com')->first();
+
+        $this->assertSame('JURÍDICO', $contato->departamento);
+        $this->assertSame('6018', $contato->ramal);
+    }
+
+    public function test_departamento_do_representante_vence_o_de_profissionais(): void
+    {
+        $this->seedSource();
+        $this->seedEntradaFormulario(userId: 4, email: 'danilo@x.com', nome: 'Danilo', entryId: 77, assocUserId: 1);
+
+        DB::connection('pgsql-associado')->table('wp_usermeta')->insert([
+            ['user_id' => 4, 'meta_key' => '_profissionais_departamento', 'meta_value' => 'MARKETING'],
+            ['user_id' => 4, 'meta_key' => '_representante_departamento', 'meta_value' => 'Diretoria'],
+        ]);
+
+        $this->service()->run(new AssociadosSyncOptions);
+
+        $contato = DB::table('client_contatos')->where('email', 'danilo@x.com')->first();
+
+        $this->assertSame('Diretoria', $contato->departamento);
+    }
+
+    public function test_departamento_vazio_no_wp_nao_apaga_o_digitado_a_mao(): void
+    {
+        $this->seedSource();
+        $this->seedEntradaFormulario(userId: 4, email: 'danilo@x.com', nome: 'Danilo', entryId: 77, assocUserId: 1);
+
+        DB::connection('pgsql-associado')->table('wp_usermeta')->insert([
+            ['user_id' => 4, 'meta_key' => '_profissionais_departamento', 'meta_value' => '   '],
+        ]);
+
+        $this->service()->run(new AssociadosSyncOptions);
+
+        DB::table('client_contatos')->where('email', 'danilo@x.com')
+            ->update(['departamento' => 'Compliance', 'ramal' => '1234']);
+
+        $this->service()->run(new AssociadosSyncOptions);
+
+        $contato = DB::table('client_contatos')->where('email', 'danilo@x.com')->first();
+
+        $this->assertSame('Compliance', $contato->departamento);
+        $this->assertSame('1234', $contato->ramal);
+    }
+
+    /**
+     * O datepicker do portal grava com o MÊS na frente; "11/23/1979" não é
+     * 11 de novembro. Ver resolveNascimento() no service.
+     */
+    public function test_nascimento_em_formato_americano_vira_data_e_aniversario(): void
+    {
+        $this->seedSource();
+        $this->seedEntradaFormulario(userId: 4, email: 'danilo@x.com', nome: 'Danilo', entryId: 77, assocUserId: 1);
+
+        DB::connection('pgsql-associado')->table('wp_usermeta')->insert([
+            ['user_id' => 4, 'meta_key' => '_profissionais_birthdate', 'meta_value' => '11/23/1979'],
+        ]);
+
+        $this->service()->run(new AssociadosSyncOptions);
+
+        $contato = ClientContato::where('email', 'danilo@x.com')->first();
+
+        $this->assertSame('1979-11-23', $contato->dt_nascimento->format('Y-m-d'));
+        $this->assertSame('23/11', $contato->aniversario);
+    }
+
+    public function test_nascimento_iso_e_so_dia_mes_e_lixo_do_formulario(): void
+    {
+        $this->seedSource();
+        $this->seedEntradaFormulario(userId: 4, email: 'iso@x.com', nome: 'Iso', entryId: 77, assocUserId: 1);
+        $this->seedEntradaFormulario(userId: 5, email: 'semano@x.com', nome: 'Sem Ano', entryId: 78, assocUserId: 1);
+        $this->seedEntradaFormulario(userId: 6, email: 'lixo@x.com', nome: 'Lixo', entryId: 79, assocUserId: 1);
+
+        DB::connection('pgsql-associado')->table('wp_usermeta')->insert([
+            ['user_id' => 4, 'meta_key' => '_profissionais_birthdate', 'meta_value' => '1998-06-11'],
+            // Só dia e mês: vira aniversário, sem data de nascimento.
+            ['user_id' => 5, 'meta_key' => '_profissionais_birthdate', 'meta_value' => '0000-10-16'],
+            // Default do formulário — 625 usuários na origem.
+            ['user_id' => 6, 'meta_key' => '_profissionais_birthdate', 'meta_value' => '0000-00-00'],
+        ]);
+
+        $this->service()->run(new AssociadosSyncOptions);
+
+        $iso = ClientContato::where('email', 'iso@x.com')->first();
+        $this->assertSame('1998-06-11', $iso->dt_nascimento->format('Y-m-d'));
+        $this->assertSame('11/06', $iso->aniversario);
+
+        $semAno = DB::table('client_contatos')->where('email', 'semano@x.com')->first();
+        $this->assertNull($semAno->dt_nascimento);
+        $this->assertSame('16/10', $semAno->aniversario);
+
+        $lixo = DB::table('client_contatos')->where('email', 'lixo@x.com')->first();
+        $this->assertNull($lixo->dt_nascimento);
+        $this->assertNull($lixo->aniversario);
+    }
+
+    /**
+     * `_profissionais_celular` já foi reserva de `telefone_2` e deixou ~1.640
+     * contatos com o celular gravado lá. Agora que ele tem coluna própria, essa
+     * cópia sai — e só ela.
+     */
+    public function test_telefone_2_que_e_copia_do_celular_e_limpo(): void
+    {
+        $this->seedSource();
+        $this->seedEntradaFormulario(userId: 4, email: 'danilo@x.com', nome: 'Danilo', entryId: 77, assocUserId: 1);
+
+        DB::connection('pgsql-associado')->table('wp_usermeta')->insert([
+            ['user_id' => 4, 'meta_key' => '_profissionais_celular', 'meta_value' => '(11) 93363-0272'],
+        ]);
+
+        // Estado deixado pelo mapeamento antigo.
+        $this->service()->run(new AssociadosSyncOptions);
+        DB::table('client_contatos')->where('email', 'danilo@x.com')
+            ->update(['telefone_2' => '(11) 93363-0272', 'celular' => null]);
+
+        $report = $this->service()->run(new AssociadosSyncOptions);
+
+        $contato = DB::table('client_contatos')->where('email', 'danilo@x.com')->first();
+
+        $this->assertSame('(11) 93363-0272', $contato->celular);
+        $this->assertNull($contato->telefone_2);
+        $this->assertSame(1, $report->telefone2Limpos);
+    }
+
+    public function test_telefone_2_de_verdade_sobrevive_a_limpeza_do_celular(): void
+    {
+        $this->seedSource();
+        $this->seedEntradaFormulario(userId: 4, email: 'danilo@x.com', nome: 'Danilo', entryId: 77, assocUserId: 1);
+
+        DB::connection('pgsql-associado')->table('wp_usermeta')->insert([
+            ['user_id' => 4, 'meta_key' => '_profissionais_celular', 'meta_value' => '(11) 93363-0272'],
+        ]);
+
+        $this->service()->run(new AssociadosSyncOptions);
+        DB::table('client_contatos')->where('email', 'danilo@x.com')
+            ->update(['telefone_2' => '(11) 4004-0000']);
+
+        $report = $this->service()->run(new AssociadosSyncOptions);
+
+        $contato = DB::table('client_contatos')->where('email', 'danilo@x.com')->first();
+
+        $this->assertSame('(11) 4004-0000', $contato->telefone_2);
+        $this->assertSame(0, $report->telefone2Limpos);
     }
 
     public function test_metas_de_representante_vencem_as_de_profissionais(): void
@@ -825,6 +990,39 @@ class AssociadosSyncServiceTest extends TestCase
         $this->assertSame(1, DB::table('client_enderecos')->count());
     }
 
+    /**
+     * Idempotência dos campos novos. O nascimento é o que mais arrisca quebrá-la:
+     * a coluna é varchar e o cast `date` do model devolve "Y-m-d H:i:s" ao
+     * gravar, enquanto o sync calcula "Y-m-d". Sem normalizar a comparação, a
+     * segunda execução veria diferença e reescreveria o mesmo valor.
+     */
+    public function test_idempotencia_dos_campos_novos_do_contato(): void
+    {
+        $this->seedSource();
+        $this->seedEntradaFormulario(userId: 4, email: 'danilo@x.com', nome: 'Danilo', entryId: 77, assocUserId: 1);
+
+        DB::connection('pgsql-associado')->table('wp_usermeta')->insert([
+            ['user_id' => 4, 'meta_key' => '_profissionais_departamento', 'meta_value' => 'COMPLIANCE'],
+            ['user_id' => 4, 'meta_key' => '_profissionais_ramal', 'meta_value' => '6018'],
+            ['user_id' => 4, 'meta_key' => '_profissionais_celular', 'meta_value' => '(11) 93363-0272'],
+            ['user_id' => 4, 'meta_key' => '_profissionais_birthdate', 'meta_value' => '4/27/1978'],
+        ]);
+
+        $this->service()->run(new AssociadosSyncOptions);
+        $second = $this->service()->run(new AssociadosSyncOptions);
+
+        $this->assertSame(0, $second->contatosAtualizados);
+        $this->assertSame(3, $second->contatosSemMudanca);
+        $this->assertSame(0, $second->telefone2Limpos);
+
+        $contato = ClientContato::where('email', 'danilo@x.com')->first();
+        $this->assertSame('1978-04-27', $contato->dt_nascimento->format('Y-m-d'));
+        $this->assertSame('27/04', $contato->aniversario);
+        $this->assertSame('COMPLIANCE', $contato->departamento);
+        $this->assertSame('6018', $contato->ramal);
+        $this->assertSame('(11) 93363-0272', $contato->celular);
+    }
+
     public function test_dry_run_nao_grava_nada_incluindo_updates(): void
     {
         DB::table('clients')->insert([
@@ -911,7 +1109,7 @@ class AssociadosSyncServiceTest extends TestCase
         $this->assertSame(1, $byKey['razao_social']['linhas']);
         $this->assertSame(1, $byKey['meta_livre']['linhas']);
         $this->assertSame(4, $byKey['cnpj_associada']['linhas']); // users 1, 2, 3 e 99
-        $this->assertSame(2, $byKey['nickname']['usuarios']); // users 1 e 3
+        $this->assertSame(3, $byKey['nickname']['usuarios']); // users 1, 2 e 3
 
         $this->assertSame(0, DB::table('clients')->count());
         $this->assertSame(0, DB::table('client_contatos')->count());

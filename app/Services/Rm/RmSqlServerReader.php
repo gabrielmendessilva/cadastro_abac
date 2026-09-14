@@ -45,13 +45,14 @@ class RmSqlServerReader implements RmReaderInterface
 
     /**
      * FCFOCOMPL tem dezenas de colunas custom (EMAIL1A..EMAIL21A etc.); daqui só
-     * interessa o par que a secretaria usava como recorte de "cadastro em ordem".
+     * interessa o par que a secretaria usava como recorte de "cadastro em ordem"
+     * (STATUS/OCORRENCIA) e a OBSERVACAO, que alimenta a Observação do cadastro.
      * ASSOCIADO existe nesta tabela e é deliberadamente ignorado — quem é
      * associado vem do legado e do WordPress, nunca do RM.
      *
      * @var list<string>
      */
-    private const FCFOCOMPL_COLUMNS = ['CODCOLIGADA', 'CODCFO', 'STATUS', 'OCORRENCIA'];
+    private const FCFOCOMPL_COLUMNS = ['CODCOLIGADA', 'CODCFO', 'STATUS', 'OCORRENCIA', 'OBSERVACAO'];
 
     /** @var list<string> */
     private const GCCUSTO_COLUMNS = [

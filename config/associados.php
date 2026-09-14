@@ -83,6 +83,13 @@ return [
         '_profissionais_funcao_cargo',
         '_profissionais_telefone',
         '_profissionais_celular',
+        // Departamento e ramal do contato (ver METAS_TEXTO no service).
+        '_representante_departamento',
+        '_profissionais_departamento',
+        '_profissionais_ramal',
+        // Nascimento do contato, destrinchado em dt_nascimento + aniversario
+        // (ver META_NASCIMENTO e resolveNascimento() no service).
+        '_profissionais_birthdate',
         // Lixo interno do WP visto no censo da primeira execução real.
         'wp_elementor_enable_ai',
         'community-events-location',

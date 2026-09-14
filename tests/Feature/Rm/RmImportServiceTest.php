@@ -3,6 +3,7 @@
 namespace Tests\Feature\Rm;
 
 use App\Models\Client;
+use App\Services\Rm\Exceptions\RmImportException;
 use App\Services\Rm\RmImportOptions;
 use App\Services\Rm\RmImportService;
 use Illuminate\Support\Facades\DB;
@@ -238,7 +239,7 @@ class RmImportServiceTest extends TestCase
 
     private function service(FakeRmReader $reader): RmImportService
     {
-        return new RmImportService(reader: $reader, logger: new NullLogger());
+        return new RmImportService(reader: $reader, logger: new NullLogger);
     }
 
     private function importOptions(
@@ -248,12 +249,14 @@ class RmImportServiceTest extends TestCase
         bool $desativarForaDeOrdem = true,
         array $documentos = [],
         bool $somenteEnderecos = false,
+        bool $somenteContatos = false,
     ): RmImportOptions {
         return new RmImportOptions(
             dryRun: $dryRun,
             chunkSize: $chunk,
             backfill: $backfill,
             somenteEnderecos: $somenteEnderecos,
+            somenteContatos: $somenteContatos,
             desativarForaDeOrdem: $desativarForaDeOrdem,
             documentos: $documentos,
         );
@@ -263,10 +266,10 @@ class RmImportServiceTest extends TestCase
      * Linhas de FCFOCOMPL com o par STATUS/OCORRENCIA em ordem — o recorte que
      * mantém a empresa ativa no app. Chaves no formato "coligada|codcfo".
      *
-     * @param list<string> $chaves
+     * @param  list<string>  $chaves
      * @return array<string,array<string,mixed>>
      */
-    private function fcfoComplEmOrdem(array $chaves): array
+    private function fcfoComplEmOrdem(array $chaves, array $observacoes = []): array
     {
         $linhas = [];
 
@@ -278,6 +281,7 @@ class RmImportServiceTest extends TestCase
                 'CODCFO' => $codcfo,
                 'STATUS' => 'OK',
                 'OCORRENCIA' => 'OK',
+                'OBSERVACAO' => $observacoes[$chave] ?? null,
             ];
         }
 
@@ -285,7 +289,7 @@ class RmImportServiceTest extends TestCase
     }
 
     /**
-     * @param array<string,mixed> $overrides
+     * @param  array<string,mixed>  $overrides
      * @return array<string,mixed>
      */
     private function fcfoRow(array $overrides = []): array
@@ -354,7 +358,7 @@ class RmImportServiceTest extends TestCase
     }
 
     /**
-     * @param array<string,mixed> $overrides
+     * @param  array<string,mixed>  $overrides
      * @return array<string,mixed>
      */
     private function contatoRow(array $overrides = []): array
@@ -575,7 +579,7 @@ class RmImportServiceTest extends TestCase
         $this->assertSame(0, $second->centrosCustoCriados);
         $this->assertSame(0, $second->backfillCentroCusto);
         $this->assertSame(0, $second->redesSociaisCriadas);
-        $this->assertSame([0, 0, 0, 0, 0, 0, 0, 0], array_values($second->backfillCampos));
+        $this->assertSame([0, 0, 0, 0, 0, 0, 0, 0, 0], array_values($second->backfillCampos));
 
         $this->assertSame(1, DB::table('clients')->count());
         $this->assertSame(1, DB::table('client_contatos')->count());
@@ -794,6 +798,179 @@ class RmImportServiceTest extends TestCase
         $this->assertSame(2, $report->backfillEnderecos);
     }
 
+    /**
+     * Modo `--somente-contatos`: cria o contato que falta e não escreve em mais
+     * nada. O cliente aqui está com tudo o que o backfill normal preencheria —
+     * campos opcionais vazios, sem endereço, sem centro de custo, sem site e
+     * desativado à mão — justamente para que qualquer escrita a mais apareça.
+     */
+    public function test_somente_contatos_cria_o_que_falta_e_nao_toca_no_resto(): void
+    {
+        $clientId = DB::table('clients')->insertGetId([
+            'name' => 'MANTEM', 'document' => '12.345.678/0001-95',
+            'status' => false,
+            'created_at' => '2020-01-01 00:00:00', 'updated_at' => '2020-01-01 00:00:00',
+        ]);
+
+        $reader = new FakeRmReader(
+            fcfo: [$this->fcfoRow()],
+            contatos: [$this->contatoRow()],
+            defaults: [['CODCOLIGADA' => 1, 'CODCOLCFO' => 1, 'CODCFO' => '000123', 'CODCCUSTO' => '01.001']],
+            centrosCusto: [['CODCOLIGADA' => 1, 'CODCCUSTO' => '01.001', 'NOME' => 'Administração', 'CODREDUZIDO' => null, 'CODCLASSIFICA' => null, 'ATIVO' => 1, 'PERMITELANC' => 1, 'RESPONSAVEL' => null]],
+            fcfoCompl: $this->fcfoComplEmOrdem(['1|000123']),
+        );
+
+        $report = $this->service($reader)->run($this->importOptions(somenteContatos: true));
+
+        // O que devia acontecer:
+        $this->assertSame(1, $report->contatosCriados);
+        $contato = DB::table('client_contatos')->firstOrFail();
+        $this->assertSame('Maria Souza', $contato->nome);
+        $this->assertSame($clientId, (int) $contato->client_id);
+
+        // E nada além disso:
+        $this->assertSame(0, DB::table('client_enderecos')->count(), 'endereço não devia entrar');
+        $this->assertSame(0, DB::table('centros_custo')->count(), 'centro de custo não devia entrar');
+        $this->assertSame(0, DB::table('client_redes_sociais')->count(), 'site não devia entrar');
+        $this->assertSame(1, DB::table('clients')->count(), 'nenhum cliente novo devia ser criado');
+
+        $row = DB::table('clients')->where('id', $clientId)->first();
+        $this->assertSame('MANTEM', $row->name);
+        $this->assertSame('2020-01-01 00:00:00', (string) $row->updated_at);
+        $this->assertNull($row->num_filiacao_abac, 'campo opcional do RM não devia ser preenchido');
+        $this->assertFalse((bool) $row->status, 'status não devia ser mexido');
+        $this->assertSame(0, $report->clientsDesativados);
+    }
+
+    /** CNPJ que ainda não tem cadastro aqui é contado e ignorado, nunca criado. */
+    public function test_somente_contatos_ignora_empresa_que_nao_existe_aqui(): void
+    {
+        $reader = new FakeRmReader(
+            fcfo: [$this->fcfoRow()],
+            contatos: [$this->contatoRow()],
+        );
+
+        $report = $this->service($reader)->run($this->importOptions(somenteContatos: true));
+
+        $this->assertSame(0, DB::table('clients')->count());
+        $this->assertSame(0, DB::table('client_contatos')->count());
+        $this->assertSame(1, $report->clientsPuladosAusentes);
+        $this->assertSame(0, $report->contatosCriados);
+    }
+
+    /** O buraco que o modo existe para tapar: coluna vazia recebe o valor do RM. */
+    public function test_somente_contatos_preenche_campos_vazios_do_contato(): void
+    {
+        $clientId = DB::table('clients')->insertGetId([
+            'name' => 'MANTEM', 'document' => '12.345.678/0001-95',
+            'created_at' => now(), 'updated_at' => now(),
+        ]);
+
+        DB::table('client_contatos')->insert([
+            'client_id' => $clientId,
+            'nome' => 'MARIA SOUZA',
+            'email' => null,
+            'telefone' => null,
+            'ramal' => null,
+            'funcao' => 'Sócia',
+            'created_at' => now(), 'updated_at' => now(),
+        ]);
+
+        $report = $this->service(new FakeRmReader(
+            fcfo: [$this->fcfoRow()],
+            contatos: [$this->contatoRow(['EMAIL' => 'maria@x.com;maria.souza@x.com'])],
+        ))->run($this->importOptions(somenteContatos: true));
+
+        $this->assertSame(0, $report->contatosCriados, 'era a mesma pessoa: não podia virar contato novo');
+        $this->assertSame(1, $report->contatosPuladosNome);
+        $this->assertSame(1, DB::table('client_contatos')->count());
+
+        $contato = DB::table('client_contatos')->firstOrFail();
+        $this->assertSame('maria@x.com', $contato->email);
+        $this->assertSame('maria.souza@x.com', $contato->email_2);
+        $this->assertSame('(11) 2222-2222', $contato->telefone);
+        $this->assertSame('123', $contato->ramal);
+        $this->assertSame('(11) 3333-3333', $contato->celular);
+        $this->assertSame('Sócia', $contato->funcao, 'coluna preenchida não pode ser sobrescrita pelo RM');
+
+        $this->assertSame(1, $report->backfillContato['email']);
+        $this->assertSame(1, $report->backfillContato['email_2']);
+        $this->assertSame(1, $report->backfillContato['telefone']);
+        $this->assertSame(1, $report->backfillContato['ramal']);
+        $this->assertSame(0, $report->backfillContato['funcao']);
+    }
+
+    /** Reexecução não pode reescrever nada: o segundo passe sai zerado. */
+    public function test_somente_contatos_e_idempotente(): void
+    {
+        DB::table('clients')->insert([
+            'name' => 'MANTEM', 'document' => '12.345.678/0001-95',
+            'created_at' => now(), 'updated_at' => now(),
+        ]);
+
+        $reader = fn (): FakeRmReader => new FakeRmReader(
+            fcfo: [$this->fcfoRow()],
+            contatos: [$this->contatoRow()],
+        );
+
+        $this->service($reader())->run($this->importOptions(somenteContatos: true));
+        $segundo = $this->service($reader())->run($this->importOptions(somenteContatos: true));
+
+        $this->assertSame(1, DB::table('client_contatos')->count());
+        $this->assertSame(0, $segundo->contatosCriados);
+        $this->assertSame(0, array_sum($segundo->backfillContato));
+    }
+
+    /**
+     * O rm:import casa por e-mail ou, sem e-mail no RM, por nome — quem está aqui
+     * sem e-mail vira uma segunda linha da mesma pessoa. No modo só-contatos o
+     * nome vale mesmo quando o RM tem e-mail, e o e-mail entra na linha existente.
+     */
+    public function test_somente_contatos_casa_por_nome_mesmo_com_email_no_rm(): void
+    {
+        $clientId = DB::table('clients')->insertGetId([
+            'name' => 'MANTEM', 'document' => '12.345.678/0001-95',
+            'created_at' => now(), 'updated_at' => now(),
+        ]);
+
+        $semEmail = [
+            'client_id' => $clientId, 'nome' => 'Maria Souza',
+            'created_at' => now(), 'updated_at' => now(),
+        ];
+
+        DB::table('client_contatos')->insert($semEmail);
+        $this->service(new FakeRmReader(fcfo: [$this->fcfoRow()], contatos: [$this->contatoRow()]))
+            ->run($this->importOptions());
+
+        $this->assertSame(2, DB::table('client_contatos')->count(), 'o rm:import cria a segunda linha');
+
+        DB::table('client_contatos')->delete();
+        DB::table('client_contatos')->insert($semEmail);
+
+        $this->service(new FakeRmReader(fcfo: [$this->fcfoRow()], contatos: [$this->contatoRow()]))
+            ->run($this->importOptions(somenteContatos: true));
+
+        $this->assertSame(1, DB::table('client_contatos')->count(), 'o modo só-contatos completa em vez de duplicar');
+        $this->assertSame('maria@x.com', DB::table('client_contatos')->value('email'));
+    }
+
+    /** Dry-run do modo só-contatos não pode gravar nada. */
+    public function test_somente_contatos_em_dry_run_nao_grava(): void
+    {
+        DB::table('clients')->insert([
+            'name' => 'MANTEM', 'document' => '12.345.678/0001-95',
+            'created_at' => now(), 'updated_at' => now(),
+        ]);
+
+        $report = $this->service(new FakeRmReader(
+            fcfo: [$this->fcfoRow()],
+            contatos: [$this->contatoRow()],
+        ))->run($this->importOptions(dryRun: true, somenteContatos: true));
+
+        $this->assertSame(1, $report->contatosCriados);
+        $this->assertSame(0, DB::table('client_contatos')->count());
+    }
+
     public function test_backfill_desligado_nao_cria_centro_custo_para_existente(): void
     {
         DB::table('clients')->insert([
@@ -842,6 +1019,7 @@ class RmImportServiceTest extends TestCase
             'categoria' => 1,
             'situacao_abac' => 0,
             'ocorrencia_abac' => 0,
+            'obs_cadastro' => 0,
         ], $report->backfillCampos);
 
         $row = DB::table('clients')->where('id', $clientId)->first();
@@ -862,6 +1040,92 @@ class RmImportServiceTest extends TestCase
             'https://www.empresateste.com.br',
             DB::table('client_redes_sociais')->where('client_id', $clientId)->value('url'),
         );
+    }
+
+    public function test_observacao_da_fcfocompl_vira_obs_cadastro_no_cliente_novo(): void
+    {
+        $reader = new FakeRmReader(
+            fcfo: [$this->fcfoRow()],
+            fcfoCompl: $this->fcfoComplEmOrdem(['1|000123'], ['1|000123' => 'Excluída do quadro em 06/94.']),
+        );
+
+        $this->service($reader)->run($this->importOptions());
+
+        // A OBSERVACAO vence o texto de proveniência.
+        $this->assertSame('Excluída do quadro em 06/94.', Client::query()->firstOrFail()->obs_cadastro);
+    }
+
+    public function test_cliente_novo_sem_observacao_no_rm_mantem_a_proveniencia(): void
+    {
+        $reader = new FakeRmReader(
+            fcfo: [$this->fcfoRow()],
+            fcfoCompl: $this->fcfoComplEmOrdem(['1|000123']), // sem OBSERVACAO
+        );
+
+        $this->service($reader)->run($this->importOptions());
+
+        $this->assertStringStartsWith('Importado do TOTVS RM', Client::query()->firstOrFail()->obs_cadastro);
+    }
+
+    public function test_backfill_preenche_observacao_em_obs_cadastro_vazio(): void
+    {
+        $clientId = DB::table('clients')->insertGetId([
+            'name' => 'MANTEM', 'document' => '12.345.678/0001-95', 'obs_cadastro' => null,
+            'created_at' => '2020-01-01 00:00:00', 'updated_at' => '2020-01-01 00:00:00',
+        ]);
+
+        $reader = new FakeRmReader(
+            fcfo: [$this->fcfoRow()],
+            fcfoCompl: $this->fcfoComplEmOrdem(['1|000123'], ['1|000123' => 'Mudou de razão social em 2019.']),
+        );
+
+        $report = $this->service($reader)->run($this->importOptions());
+
+        $this->assertSame(1, $report->backfillCampos['obs_cadastro']);
+        $this->assertSame('Mudou de razão social em 2019.', DB::table('clients')->where('id', $clientId)->value('obs_cadastro'));
+    }
+
+    /**
+     * O caso que trava o backfill comum: cliente importado antes já tem a marca
+     * de proveniência em obs_cadastro. Como é texto automático (não digitado), a
+     * OBSERVACAO do RM entra no lugar.
+     */
+    public function test_backfill_troca_proveniencia_por_observacao(): void
+    {
+        $clientId = DB::table('clients')->insertGetId([
+            'name' => 'MANTEM', 'document' => '12.345.678/0001-95',
+            'obs_cadastro' => 'Importado do TOTVS RM em 01/01/2020 — coligada 1, código 000123.',
+            'created_at' => '2020-01-01 00:00:00', 'updated_at' => '2020-01-01 00:00:00',
+        ]);
+
+        $reader = new FakeRmReader(
+            fcfo: [$this->fcfoRow()],
+            fcfoCompl: $this->fcfoComplEmOrdem(['1|000123'], ['1|000123' => 'Impedimento. DOU de 06/06/94.']),
+        );
+
+        $report = $this->service($reader)->run($this->importOptions());
+
+        $this->assertSame(1, $report->backfillCampos['obs_cadastro']);
+        $this->assertSame('Impedimento. DOU de 06/06/94.', DB::table('clients')->where('id', $clientId)->value('obs_cadastro'));
+    }
+
+    public function test_backfill_nao_sobrescreve_obs_cadastro_digitada_a_mao(): void
+    {
+        $clientId = DB::table('clients')->insertGetId([
+            'name' => 'MANTEM', 'document' => '12.345.678/0001-95',
+            'obs_cadastro' => 'Observação escrita pela secretaria.',
+            'created_at' => '2020-01-01 00:00:00', 'updated_at' => '2020-01-01 00:00:00',
+        ]);
+
+        $reader = new FakeRmReader(
+            fcfo: [$this->fcfoRow()],
+            fcfoCompl: $this->fcfoComplEmOrdem(['1|000123'], ['1|000123' => 'Texto do RM que NÃO deve entrar.']),
+        );
+
+        $report = $this->service($reader)->run($this->importOptions());
+
+        $this->assertSame(0, $report->backfillCampos['obs_cadastro']);
+        $this->assertSame('Observação escrita pela secretaria.', DB::table('clients')->where('id', $clientId)->value('obs_cadastro'));
     }
 
     /**
@@ -908,8 +1172,8 @@ class RmImportServiceTest extends TestCase
         $report = $this->service(new FakeRmReader(fcfo: [$this->fcfoRow()]))
             ->run($this->importOptions(backfill: false));
 
-        $this->assertSame([0, 0, 0, 0, 0, 0, 0, 0], array_values($report->backfillCampos));
-        $this->assertSame([0, 0, 0, 0, 0, 0, 0, 0], array_values($report->backfillContato));
+        $this->assertSame([0, 0, 0, 0, 0, 0, 0, 0, 0], array_values($report->backfillCampos));
+        $this->assertSame(0, array_sum($report->backfillContato));
         $this->assertSame(0, $report->redesSociaisCriadas);
         $this->assertNull(DB::table('clients')->value('num_filiacao_abac'));
         $this->assertSame(0, DB::table('client_redes_sociais')->count());
@@ -1195,7 +1459,7 @@ class RmImportServiceTest extends TestCase
 
         $this->assertSame(0, $segundo->comitesCriados);
         $this->assertSame(2, DB::table('client_comites')->count());
-        $this->assertSame([0, 0, 0, 0, 0, 0, 0, 0], array_values($segundo->backfillContato));
+        $this->assertSame(0, array_sum($segundo->backfillContato));
     }
 
     /**
@@ -1439,7 +1703,7 @@ class RmImportServiceTest extends TestCase
         Schema::table('client_contatos', fn ($t) => $t->dropColumn('aniversario'));
 
         try {
-            $this->expectException(\App\Services\Rm\Exceptions\RmImportException::class);
+            $this->expectException(RmImportException::class);
             $this->expectExceptionMessageMatches('/aniversario.*migrate/s');
 
             $this->service(new FakeRmReader(fcfo: [$this->fcfoRow()]))->run($this->importOptions());

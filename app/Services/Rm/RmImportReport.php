@@ -16,6 +16,9 @@ final class RmImportReport
 
     public int $clientsPuladosInvalidos = 0;
 
+    /** Só no modo --somente-contatos: CNPJ que está no RM e ainda não tem cadastro aqui. */
+    public int $clientsPuladosAusentes = 0;
+
     public int $duplicadosNoRm = 0;
 
     /** Clientes desativados por estarem no RM com o cadastro fora de ordem (STATUS/OCORRENCIA != 'OK'). */
@@ -57,6 +60,7 @@ final class RmImportReport
         'categoria' => 0,
         'situacao_abac' => 0,
         'ocorrencia_abac' => 0,
+        'obs_cadastro' => 0,
     ];
 
     /**
@@ -73,6 +77,12 @@ final class RmImportReport
         'outro_departamento' => 0,
         'representante_legal' => 0,
         'comite' => 0,
+        // Só o modo --somente-contatos preenche estas: o rm:import as escreve
+        // apenas na criação do contato.
+        'email' => 0,
+        'email_2' => 0,
+        'telefone' => 0,
+        'ramal' => 0,
     ];
 
     public int $comitesCriados = 0;
@@ -89,7 +99,7 @@ final class RmImportReport
     public function __construct(private readonly int $maxWarningSamples = 200) {}
 
     /**
-     * @param array<string,mixed> $context
+     * @param  array<string,mixed>  $context
      */
     public function warn(string $message, array $context = []): void
     {
@@ -130,6 +140,7 @@ final class RmImportReport
             ['Categoria preenchida (existentes)', $this->backfillCampos['categoria']],
             ['Situação ABAC preenchida (existentes)', $this->backfillCampos['situacao_abac']],
             ['Ocorrência ABAC preenchida (existentes)', $this->backfillCampos['ocorrencia_abac']],
+            ['Observação preenchida (existentes)', $this->backfillCampos['obs_cadastro']],
             ['Vínculos de comitê criados', $this->comitesCriados],
             ['Contatos: função preenchida (existentes)', $this->backfillContato['funcao']],
             ['Contatos: nascimento preenchido (existentes)', $this->backfillContato['dt_nascimento']],
@@ -139,6 +150,10 @@ final class RmImportReport
             ['Contatos: outros departamentos (existentes)', $this->backfillContato['outro_departamento']],
             ['Contatos: representante legal (existentes)', $this->backfillContato['representante_legal']],
             ['Contatos: marcados em comitê (existentes)', $this->backfillContato['comite']],
+            ['Contatos: e-mail preenchido (existentes)', $this->backfillContato['email']],
+            ['Contatos: 2º e-mail preenchido (existentes)', $this->backfillContato['email_2']],
+            ['Contatos: telefone preenchido (existentes)', $this->backfillContato['telefone']],
+            ['Contatos: ramal preenchido (existentes)', $this->backfillContato['ramal']],
             ['E-mails excedentes (sem coluna livre)', $this->emailsExcedentes],
             ['Erros (linhas puladas por falha)', $this->erros],
             ['Warnings registrados', count($this->warnings) + $this->warningsSuprimidos],
@@ -155,6 +170,7 @@ final class RmImportReport
             'clients_criados' => $this->clientsCriados,
             'clients_pulados_existentes' => $this->clientsPuladosExistentes,
             'clients_pulados_invalidos' => $this->clientsPuladosInvalidos,
+            'clients_pulados_ausentes' => $this->clientsPuladosAusentes,
             'duplicados_no_rm' => $this->duplicadosNoRm,
             'clients_desativados' => $this->clientsDesativados,
             'enderecos_criados' => $this->enderecosCriados,

@@ -25,6 +25,17 @@ final readonly class RmImportOptions
          */
         public bool $somenteEnderecos = false,
         /**
+         * Mexe só em contato, e só de cliente que já existe aqui: cria o que o
+         * RM tem e o portal não, e completa as colunas vazias de quem já existe.
+         * Não cria cliente e não toca em endereço, centro de custo, site, campos
+         * opcionais nem status.
+         *
+         * Existe porque o cadastro de contato envelhece sozinho — gente nova
+         * entra no RM depois do tombamento — e essa correção não pode arrastar
+         * junto uma reescrita do resto do cadastro.
+         */
+        public bool $somenteContatos = false,
+        /**
          * Desativa em clients quem está no RM sem FCFOCOMPL.STATUS = 'OK' e
          * OCORRENCIA = 'OK'. Independe de $backfill: não é preencher buraco em
          * cadastro existente, é a regra de status vinda do RM.

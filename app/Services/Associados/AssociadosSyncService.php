@@ -7,6 +7,7 @@ use App\Models\ClientContato;
 use App\Models\ClientEndereco;
 use App\Services\Associados\Exceptions\AssociadosSyncException;
 use App\Services\Rm\Support\Normalizer;
+use Illuminate\Database\ConnectionInterface;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
@@ -42,11 +43,15 @@ use Throwable;
  *   (config('associados.sync.contact_user_id')). Nome = _representante_nome_completo
  *   quando houver; senão first_name + last_name, senão nickname; usuário sem
  *   nenhuma das metas cai no display_name.
- *   Função e telefones = a primeira meta com valor de cada cadeia (METAS_FUNCAO
- *   e METAS_TELEFONE), com as metas `_profissionais_*` de reserva.
+ *   Função, telefones, celular, departamento e ramal = a primeira meta com valor
+ *   de cada cadeia (METAS_FUNCAO, METAS_TELEFONE e METAS_TEXTO), com as metas
+ *   `_profissionais_*` de reserva. `dt_nascimento` e `aniversario` saem da mesma
+ *   meta de nascimento, destrinchada em resolveNascimento().
  *   Desvio deliberado do legado: valor
  *   vazio no WP nunca anula campo do contato (telefone, obs, a própria função)
- *   — o legado sobrescrevia com null o que fora preenchido à mão no CRUD.
+ *   — o legado sobrescrevia com null o que fora preenchido à mão no CRUD. A
+ *   única exceção é limpezaTelefone2(), que desfaz a cópia do celular deixada
+ *   pelo mapeamento antigo.
  * - Endereço: metas de config('associados.endereco_meta_map') viram o endereço
  *   tipo "principal" do cliente em client_enderecos (cria se não existir,
  *   atualiza campo a campo; vazio nunca sobrescreve; NOT NULL vira '' como no
@@ -122,13 +127,61 @@ class AssociadosSyncService
      * divergentes nessa população, então o critério de menor umeta_id não corre
      * o risco que barrou `_profissionais_funcao_cargo` por tanto tempo.
      *
-     * Ressalva conhecida: 7 usuários têm só o celular. Eles entram com
-     * `telefone_2` preenchido e `telefone` vazio — cada coluna guarda a sua
+     * `_profissionais_celular` já foi reserva de `telefone_2`; hoje vai para a
+     * coluna `celular`, que é campo próprio na tela do contato. O telefone_2 que
+     * ficou com essa cópia é limpo pelo próprio sync — ver limpezaTelefone2().
+     *
+     * Ressalva conhecida: 7 usuários têm só o celular. Cada coluna guarda a sua
      * origem, sem remanejar valor de uma para a outra.
      */
     private const METAS_TELEFONE = [
         'telefone' => ['_representante_telefone', '_profissionais_telefone'],
-        'telefone_2' => ['_representante_telefone_secundario', '_profissionais_celular'],
+        'telefone_2' => ['_representante_telefone_secundario'],
+        'celular' => ['_profissionais_celular'],
+    ];
+
+    /**
+     * De-para coluna de client_contatos => metas do WP de texto livre, cada coluna
+     * com sua cadeia de reserva (vence a primeira preenchida), mesma precedência
+     * das outras: o que o representante preencheu vence o do formulário novo.
+     *
+     * Diferente das de telefone, estas não passam pelo piso de dígitos — `ramal`
+     * é justamente o campo curto ("6018") que aquele piso descartaria. Em
+     * compensação são só texto: entram truncadas no limite da coluna e nada mais.
+     *
+     * Conferência de 04/09/2026 na origem: `_profissionais_departamento` está em
+     * 1.780 usuários (43 valores distintos), `_representante_departamento` em 134
+     * (6 valores) e `_profissionais_ramal` em 421, dos quais 318 vazios. Nenhuma
+     * das três aparece duas vezes no mesmo usuário — o critério de menor umeta_id
+     * não corre aqui o risco que barrou `_profissionais_funcao_cargo`.
+     */
+    private const METAS_TEXTO = [
+        'departamento' => ['_representante_departamento', '_profissionais_departamento'],
+        'ramal' => ['_profissionais_ramal'],
+    ];
+
+    /**
+     * Meta do WP com o nascimento do profissional (1.612 usuários), destrinchada
+     * em `dt_nascimento` e/ou `aniversario` por resolveNascimento().
+     */
+    private const META_NASCIMENTO = '_profissionais_birthdate';
+
+    /**
+     * Colunas de client_contatos que o sync preenche a partir do WP, fora `nome`
+     * (que tem reserva no display_name) e `email` (que é a chave).
+     *
+     * É a lista que o preload lê para comparar e que o upsert escreve; manter em
+     * sincronia com METAS_FUNCAO, METAS_TELEFONE, METAS_TEXTO e META_NASCIMENTO.
+     */
+    private const COLUNAS_CONTATO = [
+        'funcao',
+        'telefone',
+        'telefone_2',
+        'celular',
+        'departamento',
+        'ramal',
+        'dt_nascimento',
+        'aniversario',
     ];
 
     /**
@@ -180,11 +233,8 @@ class AssociadosSyncService
     /** @var array<int,?string> user_id => nome da pessoa montado das metas do WP */
     private array $nomePessoal = [];
 
-    /** @var array<int,?string> user_id => cargo do representante no WP */
-    private array $funcaoPessoal = [];
-
-    /** @var array<int,array<string,?string>> user_id => [coluna de telefone => valor] */
-    private array $telefonesPessoais = [];
+    /** @var array<int,array<string,?string>> user_id => [coluna de client_contatos => valor do WP] */
+    private array $camposPessoais = [];
 
     /** @var array<int,array<string,string>> user_id => [meta_key mapeada => valor] */
     private array $metasPorUser = [];
@@ -317,8 +367,7 @@ class AssociadosSyncService
         $this->usersPorCnpj = [];
         $this->wpUsers = [];
         $this->nomePessoal = [];
-        $this->funcaoPessoal = [];
-        $this->telefonesPessoais = [];
+        $this->camposPessoais = [];
         $this->metasPorUser = [];
         $this->limits = ['clients' => [], 'client_contatos' => [], 'client_enderecos' => []];
         $this->hasObsCadastro = false;
@@ -338,7 +387,7 @@ class AssociadosSyncService
         $this->gfAssocField = (string) config('associados.gravity_forms.assoc_field', '19');
     }
 
-    private function source(): \Illuminate\Database\ConnectionInterface
+    private function source(): ConnectionInterface
     {
         return DB::connection($this->sourceConnection);
     }
@@ -593,7 +642,7 @@ class AssociadosSyncService
      * Fase C — usuários do WP vinculados a cada CNPJ: qualquer linha de usermeta
      * cujo meta_value seja o CNPJ (semântica do script legado).
      *
-     * @param array<string,list<string>> $grupos
+     * @param  array<string,list<string>>  $grupos
      */
     private function mapUsersToCnpjs(array $grupos, AssociadosSyncReport $report): void
     {
@@ -656,8 +705,8 @@ class AssociadosSyncService
      * caminho antigo fica como está: a meta é a fonte mais confiável, e deixar o
      * formulário sobrepor arrastaria a pessoa para uma segunda empresa.
      *
-     * @param array<string,list<string>>    $grupos dígitos => variantes cruas na origem
-     * @param array<string,array<int,true>> $sets   dígitos => user_ids já vinculados (alterado aqui)
+     * @param  array<string,list<string>>  $grupos  dígitos => variantes cruas na origem
+     * @param  array<string,array<int,true>>  $sets  dígitos => user_ids já vinculados (alterado aqui)
      */
     private function mapUsersViaGravityForms(array $grupos, array &$sets, AssociadosSyncReport $report): void
     {
@@ -777,7 +826,7 @@ class AssociadosSyncService
      * Sobrenome sozinho também vale — meio nome é melhor que apelido. Nada
      * preenchido devolve null e quem chama cai no display_name.
      *
-     * @param array<string,string> $metas meta_key => meta_value do usuário
+     * @param  array<string,string>  $metas  meta_key => meta_value do usuário
      */
     private function montaNomePessoal(array $metas): ?string
     {
@@ -803,7 +852,7 @@ class AssociadosSyncService
      * Cargo da pessoa: a primeira das METAS_FUNCAO com valor. Nada preenchido
      * devolve null, e o vazio nunca anula a função digitada à mão no CRUD.
      *
-     * @param array<string,string> $metas meta_key => meta_value do usuário
+     * @param  array<string,string>  $metas  meta_key => meta_value do usuário
      */
     private function montaFuncaoPessoal(array $metas): ?string
     {
@@ -813,8 +862,8 @@ class AssociadosSyncService
     /**
      * Primeira meta da cadeia com valor não-vazio; null se nenhuma tiver.
      *
-     * @param array<string,string> $metas meta_key => meta_value do usuário
-     * @param list<string>         $cadeia meta_keys em ordem de preferência
+     * @param  array<string,string>  $metas  meta_key => meta_value do usuário
+     * @param  list<string>  $cadeia  meta_keys em ordem de preferência
      */
     private function primeiraMetaComValor(array $metas, array $cadeia): ?string
     {
@@ -843,8 +892,8 @@ class AssociadosSyncService
      * Valor barrado devolve null e a regra de "vazio nunca anula" preserva o que
      * já está gravado — o lixo antigo continua lá, mas não se multiplica.
      *
-     * @param array<string,string> $metas  meta_key => meta_value do usuário
-     * @param list<string>         $cadeia meta_keys em ordem de preferência
+     * @param  array<string,string>  $metas  meta_key => meta_value do usuário
+     * @param  list<string>  $cadeia  meta_keys em ordem de preferência
      */
     private function primeiroTelefoneComValor(array $metas, array $cadeia): ?string
     {
@@ -857,6 +906,109 @@ class AssociadosSyncService
         }
 
         return null;
+    }
+
+    /**
+     * Todas as meta_keys do WP que alimentam um contato — o whereIn da fase D.
+     *
+     * @return list<string>
+     */
+    private static function metasDoContato(): array
+    {
+        return array_values(array_unique([
+            ...self::METAS_NOME_PESSOAL,
+            ...self::METAS_FUNCAO,
+            ...array_merge(...array_values(self::METAS_TELEFONE)),
+            ...array_merge(...array_values(self::METAS_TEXTO)),
+            self::META_NASCIMENTO,
+        ]));
+    }
+
+    /**
+     * Campos do contato montados das metas de um usuário: uma entrada por coluna
+     * de COLUNAS_CONTATO, com null onde o WP não tem valor aproveitável.
+     *
+     * @param  array<string,string>  $metas  meta_key => meta_value do usuário
+     * @return array<string,?string> coluna de client_contatos => valor
+     */
+    private function montaCamposPessoais(array $metas): array
+    {
+        $campos = ['funcao' => $this->montaFuncaoPessoal($metas)];
+
+        foreach (self::METAS_TELEFONE as $coluna => $cadeia) {
+            $campos[$coluna] = $this->primeiroTelefoneComValor($metas, $cadeia);
+        }
+
+        foreach (self::METAS_TEXTO as $coluna => $cadeia) {
+            $campos[$coluna] = $this->primeiraMetaComValor($metas, $cadeia);
+        }
+
+        return $campos + $this->resolveNascimento($metas[self::META_NASCIMENTO] ?? null);
+    }
+
+    /**
+     * Destrincha `_profissionais_birthdate` nas duas colunas do destino:
+     * `dt_nascimento` (data completa, 'Y-m-d', o model casta para date) e
+     * `aniversario` (dia/mês 'dd/mm', a coluna curta que a tela de
+     * aniversariantes também lê). Data completa preenche as duas.
+     *
+     * O campo é texto livre no WP e vem em três formatos, contados na origem em
+     * 04/09/2026 sobre os 987 valores não-vazios:
+     *
+     * - 550 em `n/j/Y` — datepicker americano, MÊS na frente. Não é leitura
+     *   torta: 336 desses só fecham como m/d/Y ("11/23/1979", "4/27/1978") e
+     *   NENHUM só fecha como d/m/Y, então os 214 ambíguos seguem a mesma regra.
+     * - 280 em `Y-m-d`, já no formato do destino.
+     * - 35 em `0000-MM-DD`: quem preencheu só dia e mês. Viram `aniversario`,
+     *   sem `dt_nascimento` — ano zero não é data.
+     *
+     * Fora esses, 625 valores são `0000-00-00` (o default do formulário, não uma
+     * data) e são descartados junto com qualquer coisa que não case com os três
+     * formatos. Data futura também cai fora: é erro de digitação, não nascimento.
+     *
+     * @return array{dt_nascimento:?string,aniversario:?string}
+     */
+    private function resolveNascimento(?string $bruto): array
+    {
+        $vazio = ['dt_nascimento' => null, 'aniversario' => null];
+        $valor = Normalizer::trimOrNull((string) $bruto);
+
+        if ($valor === null || $valor === '0000-00-00') {
+            return $vazio;
+        }
+
+        // Só dia e mês: aniversário sem data de nascimento.
+        if (preg_match('#^0000-(\d{2})-(\d{2})$#', $valor, $m) === 1) {
+            return $this->diaMesValido((int) $m[2], (int) $m[1])
+                ? ['dt_nascimento' => null, 'aniversario' => sprintf('%02d/%02d', (int) $m[2], (int) $m[1])]
+                : $vazio;
+        }
+
+        if (preg_match('#^(\d{4})-(\d{1,2})-(\d{1,2})$#', $valor, $m) === 1) {
+            [$ano, $mes, $dia] = [(int) $m[1], (int) $m[2], (int) $m[3]];
+        } elseif (preg_match('#^(\d{1,2})/(\d{1,2})/(\d{4})$#', $valor, $m) === 1) {
+            // Mês na frente — ver o levantamento no bloco acima.
+            [$ano, $mes, $dia] = [(int) $m[3], (int) $m[1], (int) $m[2]];
+        } else {
+            return $vazio;
+        }
+
+        if (! checkdate($mes, $dia, $ano) || $ano < 1900) {
+            return $vazio;
+        }
+
+        $data = sprintf('%04d-%02d-%02d', $ano, $mes, $dia);
+
+        if ($data > date('Y-m-d')) {
+            return $vazio;
+        }
+
+        return ['dt_nascimento' => $data, 'aniversario' => sprintf('%02d/%02d', $dia, $mes)];
+    }
+
+    private function diaMesValido(int $dia, int $mes): bool
+    {
+        return $dia >= 1 && $dia <= 31 && $mes >= 1 && $mes <= 12;
     }
 
     /**
@@ -879,10 +1031,10 @@ class AssociadosSyncService
                 $this->wpUsers[(int) $user->ID] = $user;
             }
 
-            // Nome, função e telefones do contato: as metas do WP, por chave.
+            // Nome e demais campos do contato: as metas do WP, por chave.
             $rows = $this->source()->table('wp_usermeta')
                 ->whereIn('user_id', $batch)
-                ->whereIn('meta_key', [...self::METAS_NOME_PESSOAL, ...self::METAS_FUNCAO, ...array_merge(...array_values(self::METAS_TELEFONE))])
+                ->whereIn('meta_key', self::metasDoContato())
                 ->orderBy('umeta_id')
                 ->get(['user_id', 'meta_key', 'meta_value']);
 
@@ -896,11 +1048,7 @@ class AssociadosSyncService
 
             foreach ($porUsuario as $userId => $metas) {
                 $this->nomePessoal[$userId] = $this->montaNomePessoal($metas);
-                $this->funcaoPessoal[$userId] = $this->montaFuncaoPessoal($metas);
-
-                foreach (self::METAS_TELEFONE as $coluna => $metasDaColuna) {
-                    $this->telefonesPessoais[$userId][$coluna] = $this->primeiroTelefoneComValor($metas, $metasDaColuna);
-                }
+                $this->camposPessoais[$userId] = $this->montaCamposPessoais($metas);
             }
 
             if ($mappedKeys !== []) {
@@ -948,7 +1096,7 @@ class AssociadosSyncService
      * Fase E — processa os grupos de CNPJ em chunks, com preload dos contatos
      * existentes de cada chunk (uma query por chunk, nada de N+1).
      *
-     * @param array<string,list<string>> $grupos
+     * @param  array<string,list<string>>  $grupos
      */
     private function processarCnpjs(array $grupos, AssociadosSyncOptions $options, AssociadosSyncReport $report): void
     {
@@ -991,8 +1139,8 @@ class AssociadosSyncService
      * Contatos já existentes dos clientes do chunk, indexados por e-mail normalizado
      * (duplicado no destino: vence o de menor id, os demais ficam intocados).
      *
-     * @param list<string> $digitsList
-     * @return array<int,array<string,array{id:?int,nome:?string,funcao:?string}>>
+     * @param  list<string>  $digitsList
+     * @return array<int,array<string,array{id:?int,nome:?string}&array<string,?string>>>
      */
     private function preloadContatos(array $digitsList): array
     {
@@ -1010,7 +1158,7 @@ class AssociadosSyncService
             $rows = DB::table('client_contatos')
                 ->whereIn('client_id', $batch)
                 ->orderBy('id')
-                ->get(['id', 'client_id', 'email', 'nome', 'funcao', ...array_keys(self::METAS_TELEFONE)]);
+                ->get(['id', 'client_id', 'email', 'nome', ...self::COLUNAS_CONTATO]);
 
             foreach ($rows as $row) {
                 $email = mb_strtolower(trim((string) $row->email));
@@ -1022,12 +1170,21 @@ class AssociadosSyncService
                 $linha = [
                     'id' => (int) $row->id,
                     'nome' => Normalizer::trimOrNull((string) $row->nome),
-                    'funcao' => Normalizer::trimOrNull((string) $row->funcao),
                 ];
 
-                foreach (array_keys(self::METAS_TELEFONE) as $coluna) {
+                foreach (self::COLUNAS_CONTATO as $coluna) {
                     $linha[$coluna] = Normalizer::trimOrNull((string) $row->{$coluna});
                 }
+
+                // A coluna é varchar e guarda os dois formatos que o app já
+                // grava: o CRUD passa pelo cast `date` do model e escreve
+                // "Y-m-d H:i:s", o rm:import escreve "Y-m-d" cru pelo query
+                // builder. Comparar só a data mantém o sync idempotente em
+                // cima dos dois — senão ele reescreveria o mesmo nascimento a
+                // cada execução.
+                $linha['dt_nascimento'] = $linha['dt_nascimento'] !== null
+                    ? substr($linha['dt_nascimento'], 0, 10)
+                    : null;
 
                 $state[(int) $row->client_id][$email] = $linha;
             }
@@ -1040,7 +1197,7 @@ class AssociadosSyncService
      * Endereço "principal" já existente dos clientes do chunk (mais de um: vence
      * o de menor id).
      *
-     * @param list<string> $digitsList
+     * @param  list<string>  $digitsList
      * @return array<int,array{id:int,fields:array<string,mixed>}>
      */
     private function preloadEnderecos(array $digitsList): array
@@ -1083,8 +1240,8 @@ class AssociadosSyncService
     }
 
     /**
-     * @param array<int,array<string,array{id:?int,nome:?string,funcao:?string}>> $contactState
-     * @param array<int,array{id:int,fields:array<string,mixed>}> $enderecoState
+     * @param  array<int,array<string,array{id:?int,nome:?string}&array<string,?string>>>  $contactState
+     * @param  array<int,array{id:int,fields:array<string,mixed>}>  $enderecoState
      */
     private function processarCnpj(
         string $digits,
@@ -1159,8 +1316,8 @@ class AssociadosSyncService
      * Resolve o valor de cada meta mapeada para o CNPJ: usuários em ordem
      * crescente, vence o primeiro valor não-vazio; divergência vira warning.
      *
-     * @param list<int> $userIds
-     * @param list<string> $metaKeys
+     * @param  list<int>  $userIds
+     * @param  list<string>  $metaKeys
      * @return array<string,string> meta_key => valor resolvido
      */
     private function resolveMetas(string $digits, array $userIds, AssociadosSyncReport $report, array $metaKeys): array
@@ -1201,7 +1358,7 @@ class AssociadosSyncService
      * e só as colunas mapeadas cujo valor no WP difere do atual (vazio nunca
      * sobrescreve; document/status nunca entram).
      *
-     * @param array<string,string> $metas
+     * @param  array<string,string>  $metas
      * @return array<string,mixed>
      */
     private function buildUpdatePayload(string $digits, array $metas): array
@@ -1227,8 +1384,8 @@ class AssociadosSyncService
     }
 
     /**
-     * @param array<string,string> $metas
-     * @param list<int> $userIds
+     * @param  array<string,string>  $metas
+     * @param  list<int>  $userIds
      */
     private function criarClient(
         string $digits,
@@ -1292,8 +1449,8 @@ class AssociadosSyncService
      * Contatos do CNPJ: chave aplicativa (client_id, e-mail normalizado), como o
      * legado (updateOrCreate por client_id + email).
      *
-     * @param list<int> $userIds
-     * @param array<int,array<string,array{id:?int,nome:?string,funcao:?string}>> $contactState
+     * @param  list<int>  $userIds
+     * @param  array<int,array<string,array{id:?int,nome:?string}&array<string,?string>>>  $contactState
      */
     private function sincronizarContatos(
         int $clientId,
@@ -1351,15 +1508,13 @@ class AssociadosSyncService
                 ?? Normalizer::trimOrNull((string) $user->display_name);
             $nome = $this->truncate('client_contatos', 'nome', $nome);
 
-            $funcao = $this->truncate('client_contatos', 'funcao', $this->funcaoPessoal[$userId] ?? null);
+            $campos = [];
 
-            $telefones = [];
-
-            foreach (array_keys(self::METAS_TELEFONE) as $coluna) {
-                $telefones[$coluna] = $this->truncate(
+            foreach (self::COLUNAS_CONTATO as $coluna) {
+                $campos[$coluna] = $this->truncate(
                     'client_contatos',
                     $coluna,
-                    $this->telefonesPessoais[$userId][$coluna] ?? null,
+                    $this->camposPessoais[$userId][$coluna] ?? null,
                 );
             }
 
@@ -1371,14 +1526,13 @@ class AssociadosSyncService
                         'client_id' => $clientId,
                         'user_id' => $this->contactUserId,
                         'nome' => $nome,
-                        'funcao' => $funcao,
                         'email' => $email,
                         'unlock_whatsApp' => false,
-                    ] + $telefones);
+                    ] + $campos);
                 }
 
                 $report->contatosCriados++;
-                $contactState[$clientId][$email] = ['id' => null, 'nome' => $nome, 'funcao' => $funcao] + $telefones;
+                $contactState[$clientId][$email] = ['id' => null, 'nome' => $nome] + $campos;
 
                 continue;
             }
@@ -1391,15 +1545,13 @@ class AssociadosSyncService
                 $mudancas['nome'] = $nome;
             }
 
-            if ($funcao !== null && $funcao !== ($existing['funcao'] ?? null)) {
-                $mudancas['funcao'] = $funcao;
-            }
-
-            foreach ($telefones as $coluna => $valor) {
+            foreach ($campos as $coluna => $valor) {
                 if ($valor !== null && $valor !== ($existing[$coluna] ?? null)) {
                     $mudancas[$coluna] = $valor;
                 }
             }
+
+            $mudancas += $this->limpezaTelefone2($campos['celular'], $existing, $report);
 
             if ($mudancas === []) {
                 $report->contatosSemMudanca++;
@@ -1427,12 +1579,52 @@ class AssociadosSyncService
     }
 
     /**
+     * Limpeza única do `telefone_2` que ficou com uma cópia do celular.
+     *
+     * Até 04/09/2026 `_profissionais_celular` era a reserva de `telefone_2`, e
+     * por isso ~1.640 contatos têm o celular gravado lá. Agora que ele vai para
+     * a coluna `celular`, esse `telefone_2` é duplicata: some quando guarda
+     * exatamente o mesmo número que estamos escrevendo em `celular`.
+     *
+     * É a única exceção deliberada ao "vazio nunca anula" — e é estreita: só
+     * apaga o que for o mesmo número (comparado por dígitos, para não escapar
+     * por diferença de máscara), nunca um segundo telefone de verdade. Depois de
+     * rodar uma vez, `telefone_2` está null e nada mais o preenche a partir do
+     * celular, então a segunda execução não tem o que limpar — a idempotência
+     * fica de pé.
+     *
+     * Um `telefone_2` novo vindo de `_representante_telefone_secundario` tem
+     * precedência: quem chama junta com `+=`, que preserva o valor já decidido.
+     *
+     * @param  array<string,mixed>  $existing  linha pré-carregada do contato
+     * @return array{telefone_2?:null}
+     */
+    private function limpezaTelefone2(?string $celular, array $existing, AssociadosSyncReport $report): array
+    {
+        $atual = $existing['telefone_2'] ?? null;
+
+        if ($celular === null || $atual === null) {
+            return [];
+        }
+
+        $digitos = Normalizer::digits($celular);
+
+        if ($digitos === '' || $digitos !== Normalizer::digits($atual)) {
+            return [];
+        }
+
+        $report->telefone2Limpos++;
+
+        return ['telefone_2' => null];
+    }
+
+    /**
      * Cria/atualiza o endereço "principal" do cliente com as metas de endereço
      * (padrão do rm:import: colunas NOT NULL viram '', complemento aceita null;
      * vazio no WP nunca sobrescreve campo preenchido).
      *
-     * @param array<string,string> $enderecoMetas
-     * @param array<int,array{id:int,fields:array<string,mixed>}> $enderecoState
+     * @param  array<string,string>  $enderecoMetas
+     * @param  array<int,array{id:int,fields:array<string,mixed>}>  $enderecoState
      */
     private function sincronizarEndereco(
         int $clientId,
@@ -1513,11 +1705,11 @@ class AssociadosSyncService
     }
 
     /**
-     * @param array<string,mixed> $context
+     * @param  array<string,mixed>  $context
      */
     private function warn(AssociadosSyncReport $report, string $message, array $context = []): void
     {
         $report->warn($message, $context);
-        $this->logger->warning('associados.sync.warn: ' . $message, $context);
+        $this->logger->warning('associados.sync.warn: '.$message, $context);
     }
 }
