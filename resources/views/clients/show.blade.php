@@ -153,7 +153,9 @@
                         <div x-show="openAbac" x-cloak class="fixed inset-0 z-[9999] overflow-y-auto bg-black/50">
                             <div class="flex min-h-full items-center justify-center p-4">
                                 <div @click.away="openAbac = false" class="relative my-8 w-full max-w-3xl rounded-2xl bg-white shadow-2xl max-h-[90vh] overflow-y-auto">
-                                    <form method="POST" action="{{ route('clients.update', $client) }}">
+                                    {{-- O partial de filiações anteriores tem forms próprios: este form fecha antes
+                                         dele (form aninhado é inválido em HTML) e o botão Salvar aponta para cá via form="". --}}
+                                    <form id="form-filiacao-abac" method="POST" action="{{ route('clients.update', $client) }}">
                                         @csrf @method('PUT')
                                         <div class="border-b border-slate-200 px-6 py-4">
                                             <h3 class="text-lg font-semibold text-slate-900">Filiação ABAC</h3>
@@ -190,18 +192,20 @@
                                                     <textarea name="obs_abac" rows="3" class="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm">{{ $client->obs_abac }}</textarea>
                                                 </div>
                                             </div>
-
-                                            {{-- Filiações anteriores --}}
-                                            <div class="rounded-xl border border-slate-200 p-4">
-                                                @include('clients.partials._filiacoes', ['tipo' => 'abac'])
-                                            </div>
-                                        </div>
-
-                                        <div class="sticky bottom-0 flex justify-end gap-3 border-t border-slate-200 bg-white px-6 py-4">
-                                            <button type="button" @click="openAbac = false" class="rounded-xl border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700">Cancelar</button>
-                                            <button type="submit" class="rounded-xl bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700">Salvar</button>
                                         </div>
                                     </form>
+
+                                    {{-- Filiações anteriores --}}
+                                    <div class="px-6 pb-6">
+                                        <div class="rounded-xl border border-slate-200 p-4">
+                                            @include('clients.partials._filiacoes', ['tipo' => 'abac'])
+                                        </div>
+                                    </div>
+
+                                    <div class="sticky bottom-0 flex justify-end gap-3 border-t border-slate-200 bg-white px-6 py-4">
+                                        <button type="button" @click="openAbac = false" class="rounded-xl border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700">Cancelar</button>
+                                        <button type="submit" form="form-filiacao-abac" class="rounded-xl bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700">Salvar</button>
+                                    </div>
                                 </div>
                             </div>
                         </div>
@@ -212,7 +216,9 @@
                         <div x-show="openSinac" x-cloak class="fixed inset-0 z-[9999] overflow-y-auto bg-black/50">
                             <div class="flex min-h-full items-center justify-center p-4">
                                 <div @click.away="openSinac = false" class="relative my-8 w-full max-w-3xl rounded-2xl bg-white shadow-2xl max-h-[90vh] overflow-y-auto">
-                                    <form method="POST" action="{{ route('clients.update', $client) }}">
+                                    {{-- O partial de filiações anteriores tem forms próprios: este form fecha antes
+                                         dele (form aninhado é inválido em HTML) e o botão Salvar aponta para cá via form="". --}}
+                                    <form id="form-filiacao-sinac" method="POST" action="{{ route('clients.update', $client) }}">
                                         @csrf @method('PUT')
                                         <div class="border-b border-slate-200 px-6 py-4">
                                             <h3 class="text-lg font-semibold text-slate-900">Filiação SINAC</h3>
@@ -249,18 +255,20 @@
                                                     <textarea name="obs_sinac" rows="3" class="w-full rounded-xl border border-slate-300 px-3 py-2 text-sm">{{ $client->obs_sinac }}</textarea>
                                                 </div>
                                             </div>
-
-                                            {{-- Filiações anteriores --}}
-                                            <div class="rounded-xl border border-slate-200 p-4">
-                                                @include('clients.partials._filiacoes', ['tipo' => 'sinac'])
-                                            </div>
-                                        </div>
-
-                                        <div class="sticky bottom-0 flex justify-end gap-3 border-t border-slate-200 bg-white px-6 py-4">
-                                            <button type="button" @click="openSinac = false" class="rounded-xl border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700">Cancelar</button>
-                                            <button type="submit" class="rounded-xl bg-purple-600 px-4 py-2 text-sm font-medium text-white hover:bg-purple-700">Salvar</button>
                                         </div>
                                     </form>
+
+                                    {{-- Filiações anteriores --}}
+                                    <div class="px-6 pb-6">
+                                        <div class="rounded-xl border border-slate-200 p-4">
+                                            @include('clients.partials._filiacoes', ['tipo' => 'sinac'])
+                                        </div>
+                                    </div>
+
+                                    <div class="sticky bottom-0 flex justify-end gap-3 border-t border-slate-200 bg-white px-6 py-4">
+                                        <button type="button" @click="openSinac = false" class="rounded-xl border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700">Cancelar</button>
+                                        <button type="submit" form="form-filiacao-sinac" class="rounded-xl bg-purple-600 px-4 py-2 text-sm font-medium text-white hover:bg-purple-700">Salvar</button>
+                                    </div>
                                 </div>
                             </div>
                         </div>
