@@ -24,6 +24,9 @@
                     <a href="{{ route('aniversariantes.index') }}" class="block rounded-xl px-4 py-3 hover:bg-slate-800 {{ request()->routeIs('aniversariantes.*') ? 'bg-slate-800' : '' }}">🎂 Aniversariantes</a>
                     <a href="{{ route('listas.index') }}" class="block rounded-xl px-4 py-3 hover:bg-slate-800 {{ request()->routeIs('listas.*') ? 'bg-slate-800' : '' }}">Listas</a>
                 @endcan
+                @can('relatorios.view')
+                    <a href="{{ route('relatorios.cadastro') }}" class="block rounded-xl px-4 py-3 hover:bg-slate-800 {{ request()->routeIs('relatorios.*') ? 'bg-slate-800' : '' }}">📊 Relatórios</a>
+                @endcan
                 {{-- @can('documents.view')
                     <a href="{{ route('documents.index') }}" class="block rounded-xl px-4 py-3 hover:bg-slate-800 {{ request()->routeIs('documents.*') ? 'bg-slate-800' : '' }}">GED</a>
                 @endcan --}}
@@ -39,7 +42,8 @@
             </nav>
         </aside>
 
-        <div class="flex-1">
+        {{-- min-w-0: sem ele, tabela larga (overflow-x-auto) estica a página em vez de rolar. --}}
+        <div class="flex-1 min-w-0">
             <header class="bg-white border-b border-slate-200 px-6 py-4 flex items-center justify-between shadow-sm">
                 <div>
                     <h2 class="text-xl font-semibold">@yield('page-title', 'Painel')</h2>

@@ -1,3 +1,12 @@
+@use('App\Services\Relatorios\CadastroRelatorio')
+@php
+    // Mais colunas, letra menor: o A4 deitado não estica.
+    $fonte = match (true) {
+        count($colunas) <= 10 => '7.5px',
+        count($colunas) <= 14 => '6.5px',
+        default => '5.5px',
+    };
+@endphp
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
@@ -22,11 +31,10 @@
 
         table.dados { width: 100%; border-collapse: collapse; }
         table.dados thead { display: table-header-group; }
-        table.dados th { background: #04355A; color: #fff; text-align: left; padding: 5px 4px; font-size: 7.5px; }
-        table.dados td { padding: 3px 4px; border-bottom: 1px solid #e5e9ee; font-size: 7.5px; vertical-align: top; }
+        table.dados th { background: #04355A; color: #fff; text-align: left; padding: 5px 4px; font-size: {{ $fonte }}; }
+        table.dados td { padding: 3px 4px; border-bottom: 1px solid #e5e9ee; font-size: {{ $fonte }}; vertical-align: top; }
         table.dados tr:nth-child(even) td { background: #F7F9FB; }
         table.dados .centro { text-align: center; }
-        table.dados .nowrap { white-space: nowrap; }
         table.dados tfoot td { font-weight: bold; color: #04355A; background: #E6EDF3; border-top: 2px solid #04355A; padding: 5px 4px; }
 
         .vazio { text-align: center; color: #808080; padding: 30px; font-size: 10px; }
@@ -56,12 +64,11 @@
         @if($linhas->isEmpty())
             <p class="vazio">Nenhum cadastro encontrado com os filtros selecionados.</p>
         @else
-            @php $centralizadas = ['associado_abac', 'status', 'uf']; $semQuebra = ['documento', 'telefone']; @endphp
             <table class="dados">
                 <thead>
                     <tr>
-                        @foreach($colunas as $chave => $coluna)
-                            <th class="{{ in_array($chave, $centralizadas, true) ? 'centro' : '' }}">{{ $coluna['titulo'] }}</th>
+                        @foreach($colunas as $coluna)
+                            <th class="{{ !empty($coluna['centro']) ? 'centro' : '' }}">{{ $coluna['titulo'] }}</th>
                         @endforeach
                     </tr>
                 </thead>
@@ -69,7 +76,7 @@
                     @foreach($linhas as $linha)
                         <tr>
                             @foreach($colunas as $chave => $coluna)
-                                <td class="{{ in_array($chave, $centralizadas, true) ? 'centro' : '' }} {{ in_array($chave, $semQuebra, true) ? 'nowrap' : '' }}">{{ $linha[$chave] ?? '' }}</td>
+                                <td class="{{ !empty($coluna['centro']) ? 'centro' : '' }}">{{ CadastroRelatorio::texto($linha[$chave] ?? null) }}</td>
                             @endforeach
                         </tr>
                     @endforeach

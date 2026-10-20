@@ -14,6 +14,7 @@ class RolePermissionSeeder extends Seeder
             'users.view', 'users.create', 'users.edit', 'users.delete',
             'clients.view', 'clients.create', 'clients.edit', 'clients.delete',
             'documents.view', 'documents.create', 'documents.edit', 'documents.delete',
+            'relatorios.view', 'relatorios.export',
         ];
 
         foreach ($permissions as $permission) {

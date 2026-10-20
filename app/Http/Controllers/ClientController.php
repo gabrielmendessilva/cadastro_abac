@@ -5,10 +5,7 @@ namespace App\Http\Controllers;
 use App\Http\Requests\StoreClientRequest;
 use App\Http\Requests\UpdateClientRequest;
 use App\Models\Client;
-use App\Models\Document;
 use App\Models\Lista\Regional;
-use App\Models\Tag;
-use App\Services\Clientes\ClientesFiltro;
 use Illuminate\Http\Request;
 
 class ClientController extends Controller
@@ -17,24 +14,144 @@ class ClientController extends Controller
     {
         abort_unless(auth()->user()->can('clients.view'), 403);
 
-        $filtro = ClientesFiltro::fromRequest($request);
+        $filtroStatus = $this->filtroComPadrao($request, 'status', '1');
+        $mostraAssociadas = $this->caixaMarcada($request, 'associadas', true);
+        $mostraNaoAssociadas = $this->caixaMarcada($request, 'nao_associadas', false);
+        // As duas marcadas — ou as duas vazias — cobrem a base inteira: não restringe.
+        $vinculoExigido = $mostraAssociadas === $mostraNaoAssociadas ? null : $mostraAssociadas;
+        $tiposSelecionados = $this->tiposSelecionados($request);
+        $categoriasDoFiltro = $this->categoriasDoFiltro($tiposSelecionados);
 
-        $clients = $filtro->query()
+        // Ordenação da lista. Só 'name' é ordenável pela tela; sem escolha, cai
+        // no padrão de sempre (mais recentes primeiro).
+        $ordenarPor = $request->query('sort') === 'name' ? 'name' : null;
+        $direcao = $request->query('dir') === 'desc' ? 'desc' : 'asc';
+
+        $clients = Client::query()
             ->withCount('documents')
             ->with(['enderecos' => fn ($q) => $q->orderByRaw("FIELD(tipo, 'principal','pagamento','entrega') ASC")->limit(1)])
+            ->when($request->filled('search'), function ($query) use ($request) {
+                // Uma palavra por vez, todas obrigatórias: nome de pessoa ("tania regina")
+                // aparece com sobrenome no meio, espaçamento irregular vindo do legado e
+                // às vezes só na ficha de contato/sócio — busca por frase inteira não acha.
+                $termos = preg_split('/\s+/', trim((string) $request->string('search')), -1, PREG_SPLIT_NO_EMPTY);
+
+                foreach ($termos as $termo) {
+                    $query->where(function ($subQuery) use ($termo) {
+                        $subQuery->where('name', 'like', "%{$termo}%")
+                            ->orWhere('fantasy_name', 'like', "%{$termo}%")
+                            ->orWhere('nome_comercial', 'like', "%{$termo}%")
+                            ->orWhere('outros_nomes', 'like', "%{$termo}%")
+                            ->orWhere('responsavel_empresa', 'like', "%{$termo}%")
+                            ->orWhere('presidente_atual', 'like', "%{$termo}%")
+                            ->orWhere('document', 'like', "%{$termo}%")
+                            ->orWhere('cpf', 'like', "%{$termo}%")
+                            ->orWhere('email', 'like', "%{$termo}%")
+                            ->orWhere('cod_omie', 'like', "%{$termo}%")
+                            ->orWhereHas('contatos', fn ($q) => $q->where('nome', 'like', "%{$termo}%"))
+                            ->orWhereHas('socios', fn ($q) => $q->where('nome', 'like', "%{$termo}%"));
+                    });
+                }
+            })
+            ->when($filtroStatus !== null, function ($query) use ($filtroStatus) {
+                $query->where('status', $filtroStatus === '1');
+            })
+            ->when($vinculoExigido !== null, fn ($query) => $query->where('associado_abac', $vinculoExigido))
+            // Tipo de cadastro: os botões da tela antiga do Access virados em
+            // checkbox. null = sem restrição (nada marcado, ou "Outras Empresas").
+            ->when($categoriasDoFiltro !== null, fn ($query) => $query->whereIn('categoria', $categoriasDoFiltro))
+            ->when($request->filled('state'), fn($query) => $query->whereHas('enderecos', fn($q) => $q->where('estado', $request->string('state'))))
+            ->when($request->filled('city'), fn($query) => $query->whereHas('enderecos', fn($q) => $q->where('municipio', 'like', '%' . $request->string('city') . '%')))
+            ->when(
+                $ordenarPor === 'name',
+                fn ($query) => $query->orderBy('name', $direcao),
+                fn ($query) => $query->latest(),
+            )
             ->paginate(10)
             ->withQueryString();
 
-        return view('clients.index', [
-            'clients' => $clients,
-            'filtroStatus' => $filtro->filtroStatus,
-            'mostraAssociadas' => $filtro->mostraAssociadas,
-            'mostraNaoAssociadas' => $filtro->mostraNaoAssociadas,
-            'vinculoExigido' => $filtro->vinculoExigido(),
-            'tiposSelecionados' => $filtro->tiposSelecionados,
-            'ordenarPor' => $filtro->ordenarPor,
-            'direcao' => $filtro->direcao,
-        ]);
+        return view('clients.index', compact(
+            'clients',
+            'filtroStatus',
+            'mostraAssociadas',
+            'mostraNaoAssociadas',
+            'vinculoExigido',
+            'tiposSelecionados',
+            'ordenarPor',
+            'direcao',
+        ));
+    }
+
+    /**
+     * Valor de um filtro da lista, com o padrão da tela quando a URL não diz nada.
+     *
+     * Chave ausente é quem acabou de chegar em /clients (login, menu, link solto):
+     * entra o padrão. Chave presente e vazia é o usuário tendo escolhido "todos"
+     * no formulário — essa escolha vale, senão ele nunca sairia do padrão.
+     *
+     * Devolve null quando o filtro não deve entrar na query.
+     */
+    private function filtroComPadrao(Request $request, string $campo, string $padrao): ?string
+    {
+        $valor = $request->has($campo) ? $request->query($campo) : $padrao;
+
+        return is_string($valor) && $valor !== '' ? $valor : null;
+    }
+
+    /**
+     * Estado de uma caixa de filtro que tem input hidden de par na tela.
+     *
+     * Checkbox desmarcada não é enviada pelo navegador, então sem o hidden o
+     * controller receberia a mesma requisição em dois casos opostos: "desmarquei"
+     * e "acabei de abrir a tela". Com o hidden, chave ausente é só a abertura —
+     * e aí entra o padrão.
+     */
+    private function caixaMarcada(Request $request, string $campo, bool $padrao): bool
+    {
+        return $request->has($campo) ? $request->query($campo) === '1' : $padrao;
+    }
+
+    /**
+     * Grupos de tipo de cadastro marcados na tela, descartando o que não existe.
+     *
+     * @return list<string>
+     */
+    private function tiposSelecionados(Request $request): array
+    {
+        $marcados = array_filter((array) $request->query('tipo', []), 'is_string');
+
+        return array_values(array_intersect($marcados, array_keys(Client::GRUPOS_CATEGORIA)));
+    }
+
+    /**
+     * Categorias que a lista deve exigir, ou null quando não há restrição.
+     *
+     * Nada marcado é a lista inteira. "Outras Empresas" também: ele é a base
+     * toda por definição do negócio, então marcar ele junto com outro grupo
+     * dissolve a restrição em vez de somar mais uma fatia.
+     *
+     * @param list<string> $tipos
+     * @return list<string>|null
+     */
+    private function categoriasDoFiltro(array $tipos): ?array
+    {
+        if ($tipos === []) {
+            return null;
+        }
+
+        $categorias = [];
+
+        foreach ($tipos as $tipo) {
+            $doGrupo = Client::GRUPOS_CATEGORIA[$tipo]['categorias'];
+
+            if ($doGrupo === []) {
+                return null;
+            }
+
+            $categorias = array_merge($categorias, $doGrupo);
+        }
+
+        return array_values(array_unique($categorias));
     }
 
     public function create()
@@ -82,18 +199,18 @@ class ClientController extends Controller
             $allowedTabs[] = 'ged';
         }
 
-        if (! in_array($activeTab, $allowedTabs, true)) {
+        if (!in_array($activeTab, $allowedTabs, true)) {
             abort(403);
         }
 
-        $gedCategory = $activeTab === 'ged' && in_array($activeSubtab, array_keys(Document::CATEGORIES), true)
+        $gedCategory = $activeTab === 'ged' && in_array($activeSubtab, array_keys(\App\Models\Document::CATEGORIES), true)
             ? $activeSubtab
             : null;
 
         $documents = auth()->user()->can('documents.view')
             ? $client->documents()
                 ->with('uploader')
-                ->when($gedCategory, fn ($q) => $q->where('category', $gedCategory))
+                ->when($gedCategory, fn($q) => $q->where('category', $gedCategory))
                 ->when($request->filled('document_search'), function ($query) use ($request) {
                     $search = $request->document_search;
 
@@ -108,11 +225,11 @@ class ClientController extends Controller
                 ->paginate(10, ['*'], 'documents_page')
                 ->withQueryString()
             : collect();
-
+    
         $addresses = $client->enderecos()
             ->when($request->filled('address_search'), function ($query) use ($request) {
                 $search = $request->address_search;
-
+    
                 $query->where(function ($subQuery) use ($search) {
                     $subQuery->where('cep', 'like', "%{$search}%")
                         ->orWhere('rua', 'like', "%{$search}%")
@@ -127,7 +244,7 @@ class ClientController extends Controller
             ->latest()
             ->paginate(10, ['*'], 'addresses_page')
             ->withQueryString();
-
+    
         $contactSort = in_array($request->query('contact_sort'), ['nome', 'departamento'], true)
             ? $request->query('contact_sort')
             : null;
@@ -158,11 +275,11 @@ class ClientController extends Controller
             // atrás de uma pessoa, e o maior cliente da base tem 116 contatos —
             // volume que a tabela aguenta de uma vez.
             ->get();
-
+    
         $opcionais = $client->opcionais()
             ->when($request->filled('opcional_search'), function ($query) use ($request) {
                 $search = $request->opcional_search;
-
+    
                 $query->where(function ($subQuery) use ($search) {
                     $subQuery->where('site', 'like', "%{$search}%")
                         ->orWhere('num_abac', 'like', "%{$search}%")
@@ -172,7 +289,7 @@ class ClientController extends Controller
             ->latest()
             ->paginate(10, ['*'], 'opcionais_page')
             ->withQueryString();
-
+    
         $client->load([
             'regional',
             'filiacoesHistorico',
@@ -184,7 +301,7 @@ class ClientController extends Controller
             'tags',
         ]);
 
-        $allTags = Tag::orderBy('nome')->get();
+        $allTags = \App\Models\Tag::orderBy('nome')->get();
 
         $auditLogs = $activeTab === 'uso_interno'
             ? $client->auditLogs()
@@ -209,6 +326,7 @@ class ClientController extends Controller
             'auditLogs'
         ));
     }
+    
 
     public function edit(Client $client)
     {

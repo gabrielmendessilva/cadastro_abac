@@ -1,10 +1,12 @@
 <?php
 
-namespace App\Services\Clientes;
+namespace App\Services\Relatorios;
 
+use Carbon\CarbonInterface;
 use Illuminate\Support\Collection;
 use PhpOffice\PhpSpreadsheet\Cell\Coordinate;
 use PhpOffice\PhpSpreadsheet\Cell\DataType;
+use PhpOffice\PhpSpreadsheet\Shared\Date as ExcelDate;
 use PhpOffice\PhpSpreadsheet\Spreadsheet;
 use PhpOffice\PhpSpreadsheet\Style\Alignment;
 use PhpOffice\PhpSpreadsheet\Style\Border;
@@ -16,9 +18,9 @@ use PhpOffice\PhpSpreadsheet\Writer\Xlsx;
 
 /**
  * Planilha do relatório de cadastro, no layout dos relatórios do CONAC:
- * logo + título + filtros no topo, cabeçalho colorido, total no rodapé.
+ * logo + título + filtros no topo, cabeçalho colorido e total no rodapé.
  */
-final class ClientesRelatorioExcel
+final class CadastroExcel
 {
     /** Azul-marinho e laranja da logo da ABAC. */
     public const AZUL = '04355A';
@@ -30,9 +32,9 @@ final class ClientesRelatorioExcel
     /** Linhas 1-5 ficam para logo, título e metadados; a tabela começa na 6. */
     private const LINHA_CABECALHO = 6;
 
-    /** @param Collection<int,array<string,string|null>> $linhas */
+    /** @param Collection<int,array<string,mixed>> $linhas */
     public function __construct(
-        private readonly ClientesRelatorio $relatorio,
+        private readonly CadastroRelatorio $relatorio,
         private readonly Collection $linhas,
     ) {}
 
@@ -42,15 +44,15 @@ final class ClientesRelatorioExcel
         $planilha = new Spreadsheet;
         $planilha->getProperties()
             ->setCreator('ABAC')
-            ->setTitle(ClientesRelatorio::TITULO)
+            ->setTitle(CadastroRelatorio::TITULO)
             ->setDescription('Gerado pelo cadastro online da ABAC.');
 
         $aba = $planilha->getActiveSheet();
         $aba->setTitle('Cadastro');
         $aba->setShowGridlines(false);
 
-        $colunas = ClientesRelatorio::COLUNAS;
-        $ultimaColuna = Coordinate::stringFromColumnIndex(count($colunas));
+        $colunas = $this->relatorio->colunas();
+        $ultimaColuna = Coordinate::stringFromColumnIndex(max(2, count($colunas)));
 
         $this->escreveTopo($aba, $ultimaColuna);
         $this->escreveTabela($aba, $colunas);
@@ -63,10 +65,10 @@ final class ClientesRelatorioExcel
 
     private function escreveTopo(Worksheet $aba, string $ultimaColuna): void
     {
-        if (is_file(ClientesRelatorio::logo())) {
+        if (is_file(CadastroRelatorio::logo())) {
             $logo = new Drawing;
             $logo->setName('ABAC');
-            $logo->setPath(ClientesRelatorio::logo());
+            $logo->setPath(CadastroRelatorio::logo());
             $logo->setHeight(58);
             $logo->setCoordinates('A1');
             $logo->setOffsetX(6);
@@ -76,11 +78,11 @@ final class ClientesRelatorioExcel
 
         $aba->getRowDimension(1)->setRowHeight(24);
         $aba->getRowDimension(2)->setRowHeight(24);
-        $aba->getRowDimension(3)->setRowHeight(18);
+        $aba->getRowDimension(3)->setRowHeight(30);
 
-        // Título ao lado da logo (a logo ocupa a coluna A, que é larga).
+        // Título ao lado da logo (a primeira coluna é a razão social, larga).
         $aba->mergeCells("B1:{$ultimaColuna}2");
-        $aba->setCellValue('B1', mb_strtoupper(ClientesRelatorio::TITULO));
+        $aba->setCellValue('B1', mb_strtoupper(CadastroRelatorio::TITULO));
         $aba->getStyle('B1')->getFont()->setBold(true)->setSize(16)->getColor()->setRGB(self::AZUL);
         $aba->getStyle('B1')->getAlignment()
             ->setHorizontal(Alignment::HORIZONTAL_CENTER)
@@ -89,13 +91,16 @@ final class ClientesRelatorioExcel
         $aba->mergeCells("B3:{$ultimaColuna}3");
         $aba->setCellValue('B3', $this->relatorio->subtitulo());
         $aba->getStyle('B3')->getFont()->setSize(10)->getColor()->setRGB('595959');
-        $aba->getStyle('B3')->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
+        $aba->getStyle('B3')->getAlignment()
+            ->setHorizontal(Alignment::HORIZONTAL_CENTER)
+            ->setVertical(Alignment::VERTICAL_CENTER)
+            ->setWrapText(true);
 
         $aba->mergeCells("A4:{$ultimaColuna}4");
         $aba->setCellValue('A4', 'Gerado em: '.$this->relatorio->geradoEm.'  •  por '.$this->relatorio->geradoPor);
         $aba->getStyle('A4')->getFont()->setSize(9)->getColor()->setRGB('808080');
 
-        // Faixa laranja separando o topo da tabela, como a linha da logo.
+        // Faixa laranja separando o topo da tabela.
         $aba->getRowDimension(5)->setRowHeight(4);
         $aba->getStyle("A5:{$ultimaColuna}5")->getFill()
             ->setFillType(Fill::FILL_SOLID)->getStartColor()->setRGB(self::LARANJA);
@@ -115,10 +120,12 @@ final class ClientesRelatorioExcel
             foreach ($colunas as $chave => $definicao) {
                 $valor = $linha[$chave] ?? null;
                 $celula = [$coluna++, $numeroLinha];
+                $tipo = $definicao['tipo'] ?? null;
 
-                // CNPJ, telefone e CEP como texto: o Excel come zero à esquerda
-                // e transformaria documento em notação científica.
-                if ($valor !== null && $valor !== '' && ! empty($definicao['texto'])) {
+                if ($valor instanceof CarbonInterface) {
+                    $aba->setCellValue($celula, ExcelDate::PHPToExcel($valor));
+                    $aba->getStyle($celula)->getNumberFormat()->setFormatCode('dd/mm/yyyy');
+                } elseif ($tipo === 'texto' && $valor !== null && $valor !== '') {
                     $aba->setCellValueExplicit($celula, (string) $valor, DataType::TYPE_STRING);
                 } else {
                     $aba->setCellValue($celula, $valor);
@@ -162,13 +169,13 @@ final class ClientesRelatorioExcel
 
         $indice = 1;
         foreach ($colunas as $definicao) {
-            $aba->getColumnDimension(Coordinate::stringFromColumnIndex($indice++))->setWidth($definicao['largura']);
-        }
+            $letra = Coordinate::stringFromColumnIndex($indice++);
+            $aba->getColumnDimension($letra)->setWidth($definicao['largura']);
 
-        foreach (['associado_abac', 'status', 'uf'] as $centralizada) {
-            $letra = Coordinate::stringFromColumnIndex(array_search($centralizada, array_keys($colunas), true) + 1);
-            $aba->getStyle("{$letra}{$primeiraLinha}:{$letra}{$ultimaLinha}")
-                ->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
+            if (! empty($definicao['centro']) && $total > 0) {
+                $aba->getStyle("{$letra}{$primeiraLinha}:{$letra}{$ultimaLinha}")
+                    ->getAlignment()->setHorizontal(Alignment::HORIZONTAL_CENTER);
+            }
         }
 
         $aba->freezePane('A'.$primeiraLinha);
@@ -182,6 +189,6 @@ final class ClientesRelatorioExcel
             ->setFitToWidth(1)
             ->setFitToHeight(0);
         $aba->getPageSetup()->setRowsToRepeatAtTopByStartAndEnd($cabecalho, $cabecalho);
-        $aba->getHeaderFooter()->setOddFooter('&LABAC — '.ClientesRelatorio::TITULO.'&RPágina &P de &N');
+        $aba->getHeaderFooter()->setOddFooter('&LABAC — '.CadastroRelatorio::TITULO.'&RPágina &P de &N');
     }
 }

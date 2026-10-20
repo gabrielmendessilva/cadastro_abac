@@ -21,6 +21,12 @@ return Application::configure(basePath: dirname(__DIR__))
                 Request::HEADER_X_FORWARDED_AWS_ELB,
         );
 
+        // Lido pelo JavaScript da tela de relatórios para fechar o "Gerando
+        // relatório..." quando o download sai — criptografado, o JS não leria.
+        $middleware->encryptCookies(except: [
+            \App\Http\Controllers\RelatorioCadastroController::COOKIE_PRONTO,
+        ]);
+
         $middleware->alias([
             'root' => \App\Http\Middleware\EnsureUserIsRoot::class,
             'permissoes' => \App\Http\Middleware\EnsureUserManagesPermissions::class,

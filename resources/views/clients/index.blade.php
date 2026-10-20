@@ -110,29 +110,10 @@
             </div>
         </div>
 
-        {{-- Ordenação escolhida no cabeçalho da tabela não tem campo no form;
-             vai em hidden para sobreviver ao Buscar e sair igual no relatório. --}}
-        @if($ordenarPor)
-            <input type="hidden" name="sort" value="{{ $ordenarPor }}">
-            <input type="hidden" name="dir" value="{{ $direcao }}">
-        @endif
-
-        {{-- FAIXA 3 — ações, ancoradas no rodapé do painel. Os botões de relatório
-             submetem este mesmo form (formaction), então exportam o que está
-             preenchido na tela agora, mesmo sem clicar em Buscar antes. --}}
-        <div class="flex flex-wrap items-center justify-between gap-2 border-t border-slate-200 bg-slate-50 px-4 py-3">
-            <div class="flex flex-wrap items-center gap-2">
-                <span class="text-xs font-semibold uppercase tracking-wide text-slate-500">Relatório</span>
-                <button type="submit" formaction="{{ route('clients.relatorio.excel') }}"
-                        class="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-2.5 text-sm font-medium text-emerald-700">Excel</button>
-                <button type="submit" formaction="{{ route('clients.relatorio.pdf') }}"
-                        class="rounded-xl border border-red-200 bg-red-50 px-4 py-2.5 text-sm font-medium text-red-700">PDF</button>
-            </div>
-
-            <div class="flex flex-wrap items-center gap-2">
-                <a href="{{ route('clients.index') }}" class="rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-sm font-medium text-slate-700">Limpar</a>
-                <button formaction="{{ route('clients.index') }}" class="rounded-xl bg-slate-900 px-5 py-2.5 text-sm font-semibold text-white">Buscar</button>
-            </div>
+        {{-- FAIXA 3 — ações, ancoradas no rodapé do painel. --}}
+        <div class="flex flex-wrap items-center justify-end gap-2 border-t border-slate-200 bg-slate-50 px-4 py-3">
+            <a href="{{ route('clients.index') }}" class="rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-sm font-medium text-slate-700">Limpar</a>
+            <button class="rounded-xl bg-slate-900 px-5 py-2.5 text-sm font-semibold text-white">Buscar</button>
         </div>
 
     </form>

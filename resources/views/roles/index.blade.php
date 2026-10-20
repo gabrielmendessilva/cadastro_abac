@@ -92,6 +92,7 @@
                                             'create' => 'Criar',
                                             'edit'   => 'Editar',
                                             'delete' => 'Excluir',
+                                            'export' => 'Exportar',
                                             default  => $perm->name,
                                         };
                                     @endphp

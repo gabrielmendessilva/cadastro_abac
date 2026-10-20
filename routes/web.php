@@ -4,7 +4,7 @@ use App\Http\Controllers\AniversarianteController;
 use App\Http\Controllers\Auth\AuthenticatedSessionController;
 use App\Http\Controllers\Auth\PasswordChangeController;
 use App\Http\Controllers\ClientController;
-use App\Http\Controllers\ClientRelatorioController;
+use App\Http\Controllers\RelatorioCadastroController;
 use App\Http\Controllers\ClientDocumentController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\DocumentController;
@@ -48,15 +48,18 @@ Route::middleware(['auth', 'senha.trocada'])->group(function () {
     Route::get('/api/cep/{cep}', [CepController::class, 'show'])->name('cep.show')->where('cep', '[0-9\-]+');
 
     Route::resource('users', UserController::class);
-    // Relatório de cadastro com os filtros da lista. Antes do resource para
-    // que "relatorio" não seja capturado como {client}.
-    Route::get('/clients/relatorio/excel', [ClientRelatorioController::class, 'excel'])->name('clients.relatorio.excel');
-    Route::get('/clients/relatorio/pdf', [ClientRelatorioController::class, 'pdf'])->name('clients.relatorio.pdf');
     Route::resource('clients', ClientController::class);
 
     // Aniversariantes do mês (substitui a consulta SQL que era rodada no RM)
     Route::get('/aniversariantes', [AniversarianteController::class, 'index'])->name('aniversariantes.index');
     Route::get('/aniversariantes/exportar', [AniversarianteController::class, 'export'])->name('aniversariantes.export');
+
+    // Relatórios — tela de filtros com prévia; download em Excel/PDF exige relatorios.export.
+    Route::prefix('relatorios')->name('relatorios.')->group(function () {
+        Route::get('/cadastro', [RelatorioCadastroController::class, 'index'])->name('cadastro');
+        Route::get('/cadastro/excel', [RelatorioCadastroController::class, 'excel'])->name('cadastro.excel');
+        Route::get('/cadastro/pdf', [RelatorioCadastroController::class, 'pdf'])->name('cadastro.pdf');
+    });
 
     // Perfis e permissões — Root e Administrador
     Route::middleware('permissoes')->group(function () {
