@@ -4,6 +4,7 @@ use App\Http\Controllers\AniversarianteController;
 use App\Http\Controllers\Auth\AuthenticatedSessionController;
 use App\Http\Controllers\Auth\PasswordChangeController;
 use App\Http\Controllers\ClientController;
+use App\Http\Controllers\ClientRelatorioController;
 use App\Http\Controllers\ClientDocumentController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\DocumentController;
@@ -47,6 +48,10 @@ Route::middleware(['auth', 'senha.trocada'])->group(function () {
     Route::get('/api/cep/{cep}', [CepController::class, 'show'])->name('cep.show')->where('cep', '[0-9\-]+');
 
     Route::resource('users', UserController::class);
+    // Relatório de cadastro com os filtros da lista. Antes do resource para
+    // que "relatorio" não seja capturado como {client}.
+    Route::get('/clients/relatorio/excel', [ClientRelatorioController::class, 'excel'])->name('clients.relatorio.excel');
+    Route::get('/clients/relatorio/pdf', [ClientRelatorioController::class, 'pdf'])->name('clients.relatorio.pdf');
     Route::resource('clients', ClientController::class);
 
     // Aniversariantes do mês (substitui a consulta SQL que era rodada no RM)
