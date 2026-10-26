@@ -14,7 +14,7 @@ use Illuminate\Support\Collection;
  * achatadas (cliente + endereço principal + regional). Tela, Excel e PDF só
  * desenham o que sai daqui.
  */
-final class CadastroRelatorio
+final class CadastroRelatorio implements Planilha
 {
     public const TITULO = 'Relatório de Cadastro';
 
@@ -50,7 +50,7 @@ final class CadastroRelatorio
     ];
 
     /** Mesma prioridade de endereço da lista de clientes. */
-    private const PRIORIDADE_ENDERECO = ['principal', 'pagamento', 'entrega'];
+    public const PRIORIDADE_ENDERECO = ['principal', 'pagamento', 'entrega'];
 
     public readonly string $geradoEm;
 
@@ -89,6 +89,31 @@ final class CadastroRelatorio
         $pagina->setCollection($pagina->getCollection()->map(fn (Client $client) => $this->linha($client)));
 
         return $pagina;
+    }
+
+    public function titulo(): string
+    {
+        return self::TITULO;
+    }
+
+    public function geradoEm(): string
+    {
+        return $this->geradoEm;
+    }
+
+    public function geradoPor(): string
+    {
+        return $this->geradoPor;
+    }
+
+    public function nomeDaAba(): string
+    {
+        return 'Cadastro';
+    }
+
+    public function rotuloTotal(): string
+    {
+        return 'Total de cadastros';
     }
 
     /** Filtros em uma linha só, para o subtítulo da planilha e do PDF. */

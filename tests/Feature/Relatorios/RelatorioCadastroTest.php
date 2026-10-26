@@ -24,6 +24,9 @@ class RelatorioCadastroTest extends TestCase
     {
         parent::setUp();
 
+        // Rotas comentadas em routes/web.php enquanto os relatórios v2 valem.
+        $this->markTestSkipped('Relatório de cadastro desativado por enquanto.');
+
         $this->seed(RolePermissionSeeder::class);
     }
 

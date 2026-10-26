@@ -5,6 +5,7 @@ use App\Http\Controllers\Auth\AuthenticatedSessionController;
 use App\Http\Controllers\Auth\PasswordChangeController;
 use App\Http\Controllers\ClientController;
 use App\Http\Controllers\RelatorioCadastroController;
+use App\Http\Controllers\RelatorioV2Controller;
 use App\Http\Controllers\ClientDocumentController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\DocumentController;
@@ -54,11 +55,18 @@ Route::middleware(['auth', 'senha.trocada'])->group(function () {
     Route::get('/aniversariantes', [AniversarianteController::class, 'index'])->name('aniversariantes.index');
     Route::get('/aniversariantes/exportar', [AniversarianteController::class, 'export'])->name('aniversariantes.export');
 
-    // Relatórios — tela de filtros com prévia; download em Excel/PDF exige relatorios.export.
+    // Relatórios — download em Excel exige relatorios.export.
     Route::prefix('relatorios')->name('relatorios.')->group(function () {
-        Route::get('/cadastro', [RelatorioCadastroController::class, 'index'])->name('cadastro');
-        Route::get('/cadastro/excel', [RelatorioCadastroController::class, 'excel'])->name('cadastro.excel');
-        Route::get('/cadastro/pdf', [RelatorioCadastroController::class, 'pdf'])->name('cadastro.pdf');
+        // Desativado por enquanto: substituído pelos relatórios v2 abaixo.
+        // Route::get('/cadastro', [RelatorioCadastroController::class, 'index'])->name('cadastro');
+        // Route::get('/cadastro/excel', [RelatorioCadastroController::class, 'excel'])->name('cadastro.excel');
+        // Route::get('/cadastro/pdf', [RelatorioCadastroController::class, 'pdf'])->name('cadastro.pdf');
+
+        // v2: base inteira, sem filtros — clientes e contatos.
+        Route::get('/v2/clientes', [RelatorioV2Controller::class, 'clientes'])->name('v2.clientes');
+        Route::get('/v2/clientes/excel', [RelatorioV2Controller::class, 'clientesExcel'])->name('v2.clientes.excel');
+        Route::get('/v2/contatos', [RelatorioV2Controller::class, 'contatos'])->name('v2.contatos');
+        Route::get('/v2/contatos/excel', [RelatorioV2Controller::class, 'contatosExcel'])->name('v2.contatos.excel');
     });
 
     // Perfis e permissões — Root e Administrador

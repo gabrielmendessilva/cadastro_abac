@@ -2,16 +2,15 @@
 
 namespace App\Http\Controllers;
 
+use App\Http\Controllers\Concerns\AvisaDownloadPronto;
 use App\Models\Client;
 use App\Models\Lista\Regional;
-use App\Services\Relatorios\CadastroExcel;
 use App\Services\Relatorios\CadastroFiltro;
 use App\Services\Relatorios\CadastroRelatorio;
+use App\Services\Relatorios\RelatorioExcel;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
-use Symfony\Component\HttpFoundation\Cookie;
-use Symfony\Component\HttpFoundation\Response as SymfonyResponse;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
 /**
@@ -21,10 +20,11 @@ use Symfony\Component\HttpFoundation\StreamedResponse;
  */
 class RelatorioCadastroController extends Controller
 {
+    use AvisaDownloadPronto;
+
     /**
-     * Cookie que avisa a tela que o arquivo saiu, para fechar o "Gerando
-     * relatório...": download não navega, então a página não tem outro jeito
-     * de saber. Fica fora da criptografia de cookies (bootstrap/app.php).
+     * Cookie do AvisaDownloadPronto (vale também para os relatórios v2).
+     * Fica fora da criptografia de cookies (bootstrap/app.php).
      */
     public const COOKIE_PRONTO = 'relatorio_pronto';
 
@@ -54,7 +54,7 @@ class RelatorioCadastroController extends Controller
         abort_unless(auth()->user()->can('relatorios.export'), 403);
 
         $relatorio = $this->relatorio($request);
-        $planilha = new CadastroExcel($relatorio, $relatorio->linhas());
+        $planilha = new RelatorioExcel($relatorio, $relatorio->linhas());
 
         // streamDownload: o relatório é derivado, não é documento do GED.
         return $this->avisaPronto($request, response()->streamDownload(
@@ -91,28 +91,6 @@ class RelatorioCadastroController extends Controller
         );
 
         return $this->avisaPronto($request, $pdf->download($relatorio->nomeDoArquivo('pdf')));
-    }
-
-    /**
-     * Devolve o token que a tela mandou: ela compara com o que gerou para não
-     * confundir com o aviso de um download anterior.
-     *
-     * @template T of SymfonyResponse
-     *
-     * @param  T  $response
-     * @return T
-     */
-    private function avisaPronto(Request $request, SymfonyResponse $response): SymfonyResponse
-    {
-        $token = (string) $request->query('download_token', '');
-
-        if (preg_match('/^\d{1,20}$/', $token)) {
-            $response->headers->setCookie(
-                Cookie::create(self::COOKIE_PRONTO, $token, now()->addMinutes(5), '/', null, null, false, false, Cookie::SAMESITE_LAX)
-            );
-        }
-
-        return $response;
     }
 
     private function relatorio(Request $request): CadastroRelatorio

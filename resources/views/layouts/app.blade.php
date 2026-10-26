@@ -24,9 +24,11 @@
                     <a href="{{ route('aniversariantes.index') }}" class="block rounded-xl px-4 py-3 hover:bg-slate-800 {{ request()->routeIs('aniversariantes.*') ? 'bg-slate-800' : '' }}">🎂 Aniversariantes</a>
                     <a href="{{ route('listas.index') }}" class="block rounded-xl px-4 py-3 hover:bg-slate-800 {{ request()->routeIs('listas.*') ? 'bg-slate-800' : '' }}">Listas</a>
                 @endcan
-                @can('relatorios.view')
-                    <a href="{{ route('relatorios.cadastro') }}" class="block rounded-xl px-4 py-3 hover:bg-slate-800 {{ request()->routeIs('relatorios.*') ? 'bg-slate-800' : '' }}">📊 Relatórios</a>
-                @endcan
+                {{-- Route::has: em produção o código entra pelo volume antes de o
+                     route:cache ser refeito; sem isso, rota nova derruba o menu. --}}
+                @if (auth()->user()?->can('relatorios.view') && Route::has('relatorios.v2.clientes'))
+                    <a href="{{ route('relatorios.v2.clientes') }}" class="block rounded-xl px-4 py-3 hover:bg-slate-800 {{ request()->routeIs('relatorios.*') ? 'bg-slate-800' : '' }}">📊 Relatórios</a>
+                @endif
                 {{-- @can('documents.view')
                     <a href="{{ route('documents.index') }}" class="block rounded-xl px-4 py-3 hover:bg-slate-800 {{ request()->routeIs('documents.*') ? 'bg-slate-800' : '' }}">GED</a>
                 @endcan --}}
